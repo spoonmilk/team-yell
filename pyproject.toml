@@ -5,7 +5,6 @@ description = "Adversarial attacks on OpenAI Whisper"
 authors = []
 license = "MIT"
 readme = "README.md"
-packages = [{ include = "whisper_adversarial" }]
 
 [tool.poetry.dependencies]
 python = "^3.11"
