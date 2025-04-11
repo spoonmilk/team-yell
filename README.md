@@ -16,7 +16,7 @@ export PATH="$HOME/.local/bin:$PATH"
 ### Install dependencies with poetry
 
 ```bash
-poetry env use $(pyenv which python)
+poetry env use 3.11
 poetry install
 ```
 
