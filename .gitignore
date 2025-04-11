@@ -1,1 +1,62 @@
 poetry.lock
+.python-version
+
+# ---------------------
+# Python
+# ---------------------
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Bytecode and logs
+*.log
+*.out
+*.bak
+*.tmp
+*.swp
+*.swo
+
+# Jupyter/IPython
+.ipynb_checkpoints/
+
+# Virtual environments
+venv/
+.env/
+.venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# ---------------------
+# Poetry & Pyenv
+# ---------------------
+# Poetry virtualenvs (if configured outside project)
+# poetry config virtualenvs.in-project false
+# This will place the venv in a global cache dir, which should NOT be tracked
+.poetry/
+
+# Pyenv
+.python-version
+
+# ---------------------
+# Whisper / Audio Experiments
+# ---------------------
+*.wav
+*.mp3
+*.flac
+*.ogg
+*.m4a
+
+# Intermediate transcription results
+*.json
+*.srt
+*.vtt
+*.txt
