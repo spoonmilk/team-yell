@@ -23,6 +23,6 @@ poetry install
 ### Use poetry to activate virtual environment
 
 ```bash
-cd team-yell
+# cd team-yell
 poetry shell
 ```
