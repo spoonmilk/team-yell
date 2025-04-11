@@ -11,7 +11,7 @@ packages = [{ include = "whisper_adversarial" }]
 python = "^3.11"
 
 # Whisper from GitHub
-whisper = { git = "https://github.com/openai/whisper.git" }
+openai-whisper = { git = "https://github.com/openai/whisper.git" }
 
 # Core audio + ML stack
 torch = "^2.1.0"
