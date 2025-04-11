@@ -24,5 +24,5 @@ poetry install
 
 ```bash
 # cd team-yell
-poetry shell
+poetry env activate
 ```
