@@ -1,0 +1,31 @@
+[tool.poetry]
+name = "team-yell"
+version = "0.1.0"
+description = "Adversarial attacks on OpenAI Whisper"
+authors = []
+license = "MIT"
+readme = "README.md"
+packages = [{ include = "whisper_adversarial" }]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+
+# Whisper from GitHub
+whisper = { git = "https://github.com/openai/whisper.git" }
+
+# Core audio + ML stack
+torch = "^2.1.0"
+torchaudio = "^2.1.0"
+numpy = "^1.26.0"
+librosa = "^0.10.1"
+matplotlib = "^3.8.0"
+tqdm = "^4.66.0"
+
+[tool.poetry.group.dev.dependencies]
+black = "^24.0.0"
+isort = "^5.12.0"
+mypy = "^1.8.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
