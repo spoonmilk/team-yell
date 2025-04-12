@@ -60,3 +60,6 @@ venv.bak/
 *.srt
 *.vtt
 *.txt
+
+#Ignore Data Folder
+utilities/LibriSpeech/
