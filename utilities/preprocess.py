@@ -9,7 +9,7 @@ import random
 import torchaudio
 #from dataclasses import dataclass
 
-AUDIO_DIR = "LibriSpeech/dev-clean" #Relative path to the dev-clean directory of your downloaded LibriSpeech dataset
+AUDIO_DIR = os.path.abspath("../LibriSpeech/dev-clean") + "/" #Path to the dev-clean directory of your downloaded LibriSpeech dataset
 NUM_WORKERS = 5 #Number of threads you're willing to spawn to parallelize audio file reading
 
 # DATATYPES
@@ -22,7 +22,7 @@ class Locked():
 
 # HELPER FUNCTIONS
 
-def flacfiles(directory: str, p = False) -> Iterator[str]:
+def flacfiles(directory: str) -> Iterator[str]:
     """Yields a subpath of the input file path that leads to a flac file within the directory 
     (or a subdirectory of the directory) at the input file path until there are no more such subpaths to yield"""
     for entry in os.scandir(directory):

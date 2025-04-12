@@ -62,4 +62,4 @@ venv.bak/
 *.txt
 
 #Ignore Data Folder
-utilities/LibriSpeech/
+LibriSpeech/
