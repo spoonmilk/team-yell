@@ -26,3 +26,12 @@ poetry install
 # cd team-yell
 poetry env activate
 ```
+
+### Download LibriSpeech Dataset
+
+```bash
+# cd team-yell
+wget https://us.openslr.org/resources/12/dev-clean.tar.gz
+tar -xzf dev-clean.tar.gz
+rm dev-clean.tar.gz
+```
