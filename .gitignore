@@ -59,7 +59,6 @@ venv.bak/
 *.json
 *.srt
 *.vtt
-*.txt
 
 #Ignore Data Folder
 LibriSpeech/
