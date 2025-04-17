@@ -9,30 +9,30 @@
 
 ## Dependencies & Development
 
-### REQUIRED: Python 3.11
+### REQUIRED: Python 3.12 OR LOWER
 
-Currently, pytorch does not support python 3.13. Downgrade to 3.11 with `pyenv` or related tools
+Currently, pytorch does not support python 3.13. Oscar uses 3.9
 
-### Install Poetry
-
-```bash
-curl -sSL https://install.python-poetry.org | python3 -
-export PATH="$HOME/.local/bin:$PATH"
-```
-
-### Install dependencies with poetry
+### Generate .venv and activate
 
 ```bash
-poetry env use 3.11
-poetry install
+python3.9 -m venv .venv
+source .venv/bin/activate
 ```
 
-### Use poetry to activate virtual environment
+### Install dependencies from requirements.txt
 
 ```bash
-# cd team-yell
-poetry env activate
+pip install -r requirements.txt
 ```
+
+### Deactivate environment
+
+```bash
+deactivate
+```
+
+## Data Acquisition
 
 ### Download LibriSpeech Dataset
 
