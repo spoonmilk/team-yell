@@ -1,5 +1,12 @@
 # Team Yell: Adversarial Learning on Speech-to-text Models
 
+## File Structure
+
+- ``closed-src/`` for black-box attack architecture
+- ``open-src/`` for white-box attack architecture 
+- ``utilities/`` for useful functions used in multiple project areas
+- ``sketchpad/`` for experimentation/fiddling about with whisper
+
 ## Dependencies & Development
 
 ### REQUIRED: Python 3.11
