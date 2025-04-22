@@ -15,8 +15,8 @@ def wer(reference: str, hypothesis: str) -> float:
     N = number of words in the reference
 
     Args:
-        reference (str): Reference string/ground truth for the transcription.
-        hypothesis (str): The hypothesis string/transcription to be evaluated.
+        reference (str): Reference string/ground truth for the transcription
+        hypothesis (str): The hypothesis string/transcription to be evaluated
 
     Returns:
         float: WER value
