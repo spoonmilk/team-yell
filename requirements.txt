@@ -5,6 +5,7 @@ numpy==1.26.0
 librosa==0.10.1
 matplotlib==3.8.0
 tqdm==4.66.0
+jiwer==3.0.1
 
 # Whisper from GitHub
 git+https://github.com/openai/whisper.git

@@ -5,6 +5,7 @@
 - `./docs/` for internal project documentation
 - `./src/` for project code
 - `./src/models` for perturbation models (closed and open)
+- './src/attacks/' for attack optimization functions
 - `./src/utilities/` for useful functions used in multiple project areas
 - `./src/sketchpad/` for experimentation/fiddling about with whisper
 - `./tests/` for model testing functions
