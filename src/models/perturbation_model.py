@@ -18,7 +18,6 @@ class ClosedPerturbationModel(pt.nn.Module):
 
     def __init__(
         self,
-        band_num: int,
         kernel_size: tuple[int, int],
         num_channels: int,
         num_layers: int,
@@ -76,8 +75,12 @@ class ClosedPerturbationModel(pt.nn.Module):
         if in_spectrogram.ndim == 3:
             in_spectrogram = in_spectrogram.unsqueeze(1)
             x = in_spectrogram
-        else:
+        elif in_spectrogram.ndim == 4:
             x = in_spectrogram
+        else:
+            raise ValueError(
+                f"Input spectrogram must be 3D or 4D, but got {in_spectrogram.ndim}D."
+            )
 
         # Pass through model
         x = self.model(x)
