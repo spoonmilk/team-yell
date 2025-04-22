@@ -4,7 +4,9 @@ import whisper
 model = whisper.load_model("tiny")
 
 # Grab data from scratch
-audio = whisper.load_audio("/users/akhosrow/scratch/LibriSpeech/dev-clean/174/50561/174-50561-0000.flac")
+audio = whisper.load_audio(
+    "/users/akhosrow/scratch/LibriSpeech/dev-clean/174/50561/174-50561-0000.flac"
+)
 audio = whisper.pad_or_trim(audio)
 
 # make log-Mel spectrogram and move to the same device as the model
@@ -20,5 +22,3 @@ result = whisper.decode(model, mel, options)
 
 # print the recognized text
 print(result.text)
-
-
