@@ -2,10 +2,12 @@
 
 ## File Structure
 
-- ``closed-src/`` for black-box attack architecture
-- ``open-src/`` for white-box attack architecture 
-- ``utilities/`` for useful functions used in multiple project areas
-- ``sketchpad/`` for experimentation/fiddling about with whisper
+- `./docs/` for internal project documentation
+- `./src/` for project code
+- `./src/models` for perturbation models (closed and open)
+- `./src/utilities/` for useful functions used in multiple project areas
+- `./src/sketchpad/` for experimentation/fiddling about with whisper
+- `./tests/` for model testing functions
 
 ## Dependencies & Development
 
