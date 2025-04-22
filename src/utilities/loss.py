@@ -19,12 +19,12 @@ def whisper_transcribe(audio_data: pt.Tensor) -> list[list[str]]:
     return transcriptions
 
 def string_error(str_list1: list[str], str_list2: list[str]) -> int:
-    """UNTESTED Sums the number of different words across the two input lists of strings"""
+    """Sums the number of different words across the two input lists of strings"""
     if len(str_list1) != len(str_list2):
         padding = ["" for _ in range(abs(len(str_list1) - len(str_list2)))]
         if len(str_list1) < len(str_list2): str_list1 += padding
         else: str_list2 += padding
-    return reduce(lambda cum, idx: cum + 1 if str_list1[idx] == str_list2[idx] else cum, range(len(str_list1)))
+    return reduce(lambda cum, idx: cum + 1 if str_list1[idx] != str_list2[idx] else cum, range(len(str_list1)), 0)
 
 def transcription_MSE(og_audio: pt.Tensor, noise: pt.Tensor, labels: list[str]) -> float:
     """UNTESTED Calculates the MSE of whisper when the input audio tensor has noise applied to it"""
@@ -35,6 +35,6 @@ def transcription_MSE(og_audio: pt.Tensor, noise: pt.Tensor, labels: list[str]) 
         executor.shutdown(wait=True)
     return error**2/error.shape[0]
 
-if __name__ == "__main__":
-    audio, _ = torchaudio.load("/Users/zarquon/CS1470/team-yell/LibriSpeech/dev-clean/84/121123/84-121123-0000.flac")
-    print(whisper_transcribe(audio))
+# if __name__ == "__main__":
+#     audio, _ = torchaudio.load("/Users/zarquon/CS1470/team-yell/LibriSpeech/dev-clean/84/121123/84-121123-0000.flac")
+#     print(whisper_transcribe(audio))
