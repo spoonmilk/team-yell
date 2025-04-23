@@ -22,7 +22,6 @@ except NameError:
 NUM_WORKERS = 5 #Number of threads you're willing to spawn to parallelize audio file reading
 
 # DATATYPES
-
 class Locked():
     """Struct to make dealing with mutexes easier"""
     def __init__(self, inner: Any):
@@ -105,7 +104,6 @@ def grab_audio(num_files: int) -> tuple[pt.Tensor, pt.Tensor, list[list[str]]]:
     time_series = pad_to_tensor(time_series)
     return (spectrograms, time_series, transcriptions)
 
-#def save()
 
 # Quick demo
 if __name__ == "__main__":

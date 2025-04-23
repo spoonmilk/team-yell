@@ -7,13 +7,16 @@ import os
 from typing import Iterator, Any, Tuple, List
 import random
 import torchaudio
+import pickle
 
 # Path to LibriSpeech dev-clean folder (adjust as needed)
 try:
     BASE_DIR = Path(__file__).resolve().parent.parent
     AUDIO_DIR = str(BASE_DIR / "LibriSpeech" / "dev-clean") + "/"
+    DATA_DIR = str(BASE_DIR / "data") + "/"
 except NameError:
     AUDIO_DIR = os.path.abspath("../LibriSpeech/dev-clean/") + "/"
+    DATA_DIR = os.path.abspath("../data/") + "/"
 
 # Number of threads for parallel I/O
 NUM_WORKERS = 5
@@ -125,13 +128,13 @@ def extract_data(audio_paths: Locked, wave_list: Locked, trans_list: Locked) -> 
     full = AUDIO_DIR + rel_path
     wav, sr = torchaudio.load(full)  # (channels, samples)
     wav_proc = preprocess_wave(wav, sr)  # (1, MAX_LEN)
-    transcript = find_transcription(rel_path).split()
+    transcript = find_transcription(rel_path)
     with wave_list.lock, trans_list.lock:
         wave_list.inner.append(wav_proc)
         trans_list.inner.append(transcript)
 
 
-def grab_waveforms(num_files: int) -> Tuple[torch.Tensor, List[List[str]]]:
+def grab_waveforms(num_files: int) -> Tuple[torch.Tensor, list[str]]:
     """
     Load, preprocess, and batch a set of random audio files for Whisper.
 
@@ -158,6 +161,17 @@ def grab_waveforms(num_files: int) -> Tuple[torch.Tensor, List[List[str]]]:
     trans = trans_list.inner  # list of token lists
     batch = torch.stack(waves, dim=0)  # (B, 1, MAX_LEN)
     return batch, trans
+
+def save_data(waves: torch.Tensor, transcripts: list[str]):
+    torch.save(waves, DATA_DIR + 'waves.pt')
+    with open(DATA_DIR + 'transcripts.pkl', 'wb') as fl:
+        pickle.dump(transcripts, fl)
+
+def load_data() -> tuple[torch.Tensor, list[str]]:
+    waves = torch.load(DATA_DIR + 'waves.pt')
+    with open(DATA_DIR + 'transcripts.pkl', 'rb') as fl:
+        transcripts = pickle.load(fl)
+    return waves, transcripts
 
 
 # Demo

@@ -60,5 +60,9 @@ venv.bak/
 *.srt
 *.vtt
 
-#Ignore Data Folder
+#Ignore Data Folders
 LibriSpeech/
+data/
+
+#Annoying DS store files
+.DS_store

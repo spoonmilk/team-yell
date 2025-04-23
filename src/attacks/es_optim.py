@@ -4,8 +4,10 @@ from torch import nn
 import whisper
 from ..models.perturbation_model import WavPerturbationModel
 from ..utilities.wer import wer
+from ..utilities.preprocess_wav import load_data
 import re
 from concurrent.futures import ThreadPoolExecutor
+import random
 
 POP_SIZE = 50
 BATCH_SIZE = 10
@@ -16,7 +18,8 @@ MODEL_TYPE = "tiny"
 NUM_WORKERS = 5
 
 whisper_model = whisper.load_model(MODEL_TYPE)
-
+waves, transcripts = load_data()
+assert len(waves) == len(transcripts)
 
 def whisper_transcribe(audio_data: pt.Tensor) -> list[str]:
     """Transcribes all audio sequences encapsulated within an input tensor and returns whisper's transcriptions of them"""
@@ -28,10 +31,13 @@ def whisper_transcribe(audio_data: pt.Tensor) -> list[str]:
     return results
 
 
-def grab_batch(batch_sz: int) -> tuple[list[pt.Tensor], list[str]]:
+def grab_batch(batch_sz: int) -> tuple[pt.Tensor, list[str]]:
     """Size of batch -> list of audio tensors correlated with list of transcriptions"""
-    pass
-
+    indices = random.sample(range(len(transcripts)), batch_sz)
+    batch_waves = pt.gather(waves, 0, indices)
+    batch_trans = [transcripts[idx] for idx in indices]
+    return batch_waves, batch_trans
+    
 
 def noise_params(model: nn.Module):
     device = next(model.parameters()).device
