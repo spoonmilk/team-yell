@@ -90,3 +90,19 @@ def reward_fn(perturbed, clean, transcripts):
     Reward function for evolutionary strategies adversarial training.
     """
     # Let whisper transcribe the perturbed audio
+
+
+def compute_reward(clean_transcription, perturbed_transcription):
+    """
+    Compute the reward for the perturbed transcription.
+
+    Returns the 'fitness' of the perturbed transcription.
+    The fitness is the average WER between the perturbed and clean transcriptions.
+    We want WER to be as large as possible
+    """
+    wers = []
+    for gt, pr in zip(perturbed_transcription, clean_transcription):
+        w = wer(gt, pr)
+        w_clipped = min(w, 1.0)
+        wers.append(w_clipped)
+    return sum(wers) / len(wers)
