@@ -133,6 +133,7 @@ class WavPerturbationModel(nn.Module):
         layers.append(nn.ReLU(inplace=True))
         self.model = nn.Sequential(*layers)
         self.max_delta = max_delta
+        self.options = (kernel_size, num_channels, num_layers, max_delta) #Added this to make model copying easier
 
     def forward(self, in_waveform: pt.Tensor) -> pt.Tensor:
         """

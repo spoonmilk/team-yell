@@ -14,7 +14,6 @@ import torchaudio
 #Oustanding Questions
 # - Whisper runtime
 # - What is our actual fixed spectrogram size going to be?
-# - Loss function is non-numeric, we can't take the derivative of that 😫
 
 try: #Path to LibriSpeech dev-clean folder
     AUDIO_DIR = str(Path(__file__).resolve().parent.parent) + "/LibriSpeech/dev-clean/" #Will work in normal use cases (running this file directly, importing)
@@ -105,6 +104,8 @@ def grab_audio(num_files: int) -> tuple[pt.Tensor, pt.Tensor, list[list[str]]]:
     spectrograms = pad_to_tensor(spectrograms)
     time_series = pad_to_tensor(time_series)
     return (spectrograms, time_series, transcriptions)
+
+#def save()
 
 # Quick demo
 if __name__ == "__main__":

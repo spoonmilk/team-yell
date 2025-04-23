@@ -1,7 +1,74 @@
 import torch as pt
+import numpy as np
 from torch import nn
 import whisper
+from ..models.perturbation_model import WavPerturbationModel
+from ..utilities.wer import wer
+import re
+from concurrent.futures import ThreadPoolExecutor
 
+POP_SIZE = 50
+BATCH_SIZE = 10
+LEARNING_RATE = 0.01
+NOISE_MEAN = 0
+NOISE_STD_DEV_RNG_PORTION = 0.05
+MODEL_TYPE = "tiny"
+NUM_WORKERS = 5
+
+whisper_model = whisper.load_model(MODEL_TYPE)
+
+def whisper_transcribe(audio_data: pt.Tensor) -> list[str]:
+    """Transcribes all audio sequences encapsulated within an input tensor and returns whisper's transcriptions of them"""
+    sized_data = whisper.pad_or_trim(audio_data)
+    log_mel_data = whisper.log_mel_spectrogram(sized_data, n_mels=whisper_model.dims.n_mels).to(whisper_model.device)
+    results = whisper.decode(whisper_model, log_mel_data, whisper.DecodingOptions())
+    transcriptions = list(map(lambda res: re.sub(r"[^A-Za-z\s]", "", res.text).upper(), results))
+    return transcriptions
+
+def grab_batch(batch_sz: int) -> tuple[list[pt.Tensor],list[str]]:
+    """Size of batch -> list of audio tensors correlated with list of transcriptions"""
+    pass
+
+def noise_params(model: nn.Module):
+    with pt.no_grad():
+        for param in model.parameters:
+            std_dev = NOISE_STD_DEV_RNG_PORTION*(pt.max(param.data) - pt.min(param.data)).numpy()
+            noise = pt.tensor(np.random.normal(NOISE_MEAN, std_dev, param.data.shape))
+            param.data += noise                                      
+
+def epoch(
+        model: WavPerturbationModel,
+        pop_sz: int = POP_SIZE,
+        batch_sz: int = BATCH_SIZE,
+        #learning_rate: float = LEARNING_RATE,
+    ):
+    #Create population of cloned + noised models - NOT COMPUTE INTENSIVE
+    population = []
+    for _ in range(pop_sz):
+        copy = WavPerturbationModel(*model.options)
+        copy.load_state_dict(model.state_dict())
+        noise_params(copy)
+        population.append(copy)
+    #Grab batch of audio + transcriptions - NOT COMPUTE INTENSIVE
+    audio, transcriptions = grab_batch(batch_sz)
+    #Get noised output from models of batch - MILDLY COMPUTE INTENSIVE
+    perturbed_audio = map(lambda pop_mem: pop_mem(audio), population)
+    #Run perturbed audio through whisper - COMPUTE INTENSIVE
+    with ThreadPoolExecutor(max_workers=NUM_WORKERS) as executor:
+        perturbed_transes = list(executor.map(whisper_transcribe, perturbed_audio))
+        executor.shutdown(wait=True)
+    #Use WER to see how well each model did - NOT COMPUTE INTENSIVE
+    assert len(transcriptions) == len(perturbed_transes)
+    induced_wers = [[wer(actual_trans, perturbed_trans) for perturbed_trans in perturbed_transes] for actual_trans in transcriptions]
+    induced_wers = pt.tensor(induced_wers)
+    induced_wer_per_model = pt.sum(induced_wers, 1)
+    #Use WER results to weight each model - NOT COMPUTE INTENSIVE
+    model_weightings = induced_wer_per_model / pt.sum(induced_wer_per_model)
+    #Construct and new model from weighted sum of each of the created models - NOT COMPUTE EXPENSIVE
+    with pt.no_grad():
+        for param_idx in range(len(model.parameters)):
+            new_param = pt.sum(model_weightings*pt.tensor([pop_mem.parameters[param_idx] for pop_mem in population]))
+            model.parameters[param_idx].data = new_param
 
 def reward_fn(perturbed, clean, transcripts):
     """
