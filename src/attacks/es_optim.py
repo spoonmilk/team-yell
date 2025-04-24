@@ -83,10 +83,8 @@ def epoch(
     model: WavPerturbationModel,
     pop_sz: int = POP_SIZE,
     batch_sz: int = BATCH_SIZE,
-    learning_rate: float = LEARNING_RATE,
 ):
     device = next(model.parameters()).device
-
     # Grab batch of audio + transcriptions - NOT COMPUTE INTENSIVE
     clean_audio_batch, transcriptions = grab_batch(batch_sz)
     clean_audio_batch = pt.stack([a.to(device) for a in clean_audio_batch], dim=0)
@@ -135,8 +133,8 @@ def train_es(
 ):
     print(f"Starting ES training on device={device}")
     for i in range(1, epochs + 1):
-        avg_wer = epoch(model, POP_SIZE, BATCH_SIZE, LEARNING_RATE)
-        print(f"Epoch {i}/{epochs} — avg WER: {avg_wer}")
+        avg_wer = epoch(model, POP_SIZE, BATCH_SIZE)
+        print(f"Epoch {i}/{epochs} — avg WER: {avg_wer:.4f}")
     # Save model
     pt.save(
         model.state_dict(),
@@ -153,4 +151,4 @@ if __name__ == "__main__":
         num_layers=NUM_LAYERS,
         max_delta=MAX_DELTA,
     )
-    train_es(attack_model, 1)
+    train_es(attack_model, 4)
