@@ -27,14 +27,16 @@ def whisper_transcribe(audio_data: pt.Tensor) -> list[str]:
     """Transcribes all audio sequences encapsulated within an input tensor and returns whisper's transcriptions of them"""
     transcripts = []
     for audio in audio_data:
-        # ensure 1-D CPU numpy
+        # Normalize for whisper
         audio = audio.squeeze().cpu()
         audio = whisper.pad_or_trim(audio)
         mel = whisper.log_mel_spectrogram(audio).to(whisper_model.device)
-        # make sure shape is [n_mels, T]
         if mel.ndim == 3:
             mel = mel[0]
         opts = whisper.DecodingOptions()
+        # Decode the audio
+        # Transfers back to gpu for decoding
+        mel = mel.to(device)
         result = whisper.decode(whisper_model, mel, opts)
         # decode returns a single DecodingResult
         transcripts.append(result.text)
@@ -47,7 +49,7 @@ def noise_params(model: nn.Module):
         for param in model.parameters():
             data = param.data
             span = (data.max() - data.min()).clamp_min(0.0)
-            std_dev = NOISE_STD_DEV_RNG_PORTION * span
+            std_dev = span * NOISE_STD_DEV_RNG_PORTION
             noise = pt.randn_like(data, device=device) * std_dev
             data.add_(noise)
 
@@ -99,8 +101,8 @@ def epoch(
     scores = pt.tensor(
         [compute_reward(transcriptions, preds) for preds in all_preds], device=device
     )
-    fitness = pt.exp(scores)  # can experiment with other transforms
-    weights = fitness / fitness.sum()  # normalized
+    fitness = pt.exp(scores)
+    weights = fitness / fitness.sum()
 
     # Update model weights
     with pt.no_grad():
@@ -128,7 +130,7 @@ def train_es(
         print(f"Epoch {i:3d}/{epochs:3d} — avg WER: {avg_wer:.4f}")
     # Save model
     model.save_model(
-        f",/checkpoints/wavperturbation_model_{MODEL_TYPE}_{epochs}epochs.pt",
+        f"./checkpoints/wavperturbation_model_{MODEL_TYPE}_{epochs}epochs.pt",
         f"./checkpoints/wavperturbation_model_{MODEL_TYPE}_{epochs}epochs.json",
     )
     print("Model saved!")
@@ -142,4 +144,4 @@ if __name__ == "__main__":
         num_layers=4,
         max_delta=0.1,
     )
-    train_es(attack_model)
+    train_es(attack_model, 3)
