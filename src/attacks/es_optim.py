@@ -101,7 +101,11 @@ def epoch(
     all_preds = []
     with pt.inference_mode():
         for child in population:
-            perturbed = child(clean_audio_batch)
+            perturbed = child(
+                clean_audio_batch
+            )  # this calls model.forward() which produces a residual
+            # Add the residual to the clean audio
+            perturbed = clean_audio_batch + perturbed
             preds = whisper_transcribe(perturbed)  # this calls whisper.decode()
             all_preds.append(preds)
 
