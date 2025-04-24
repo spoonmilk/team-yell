@@ -138,8 +138,8 @@ if __name__ == "__main__":
     # build fresh attack model
     attack_model = WavPerturbationModel(
         kernel_size=3,
-        num_channels=16,
-        num_layers=3,
-        max_delta=0.2,
+        num_channels=32,
+        num_layers=4,
+        max_delta=0.1,
     )
     train_es(attack_model)
