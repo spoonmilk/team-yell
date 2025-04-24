@@ -40,8 +40,16 @@ deactivate
 ### Download LibriSpeech Dataset
 
 ```bash
-# cd team-yell
+# cd team-yell/src
 wget https://us.openslr.org/resources/12/dev-clean.tar.gz
 tar -xzf dev-clean.tar.gz
 rm dev-clean.tar.gz
 ```
+
+### Preprocess and Save Waveforms and Transcripts
+```bash
+# cd team-yell
+python3 -m src.utilities.preprocess_wav
+```
+Check to make sure that a "data" directory was made in src with two files in it.
+
