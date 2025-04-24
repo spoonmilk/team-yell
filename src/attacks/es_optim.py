@@ -21,6 +21,12 @@ NUM_CHANNELS = 32
 KERNEL_SIZE = 3
 MAX_DELTA = 0.01
 
+# HOME DIRECTORY FOR YOUR PROJECT - CHANGE THIS FOR YOUR SYSTEM!!!
+HOME_DIR = "/home/spoonmilk/university/csci1470/team-yell"
+
+# Saving and loading model
+CHECKPOINT_PATH = f"{HOME_DIR}/src/attacks/checkpoints/wavperturbation_model.pt"
+
 # Load Whisper
 device = "cuda" if pt.cuda.is_available() else "cpu"
 whisper_model = whisper.load_model(MODEL_TYPE)
@@ -130,11 +136,11 @@ def train_es(
     print(f"Starting ES training on device={device}")
     for i in range(1, epochs + 1):
         avg_wer = epoch(model, POP_SIZE, BATCH_SIZE, LEARNING_RATE)
-        print(f"Epoch {i:3d}/{epochs:3d} — avg WER: {avg_wer:.4f}")
+        print(f"Epoch {i}/{epochs} — avg WER: {avg_wer}")
     # Save model
-    model.save_model(
-        f"./checkpoints/wavperturbation_model_{MODEL_TYPE}_{epochs}epochs.pt",
-        f"./checkpoints/wavperturbation_model_{MODEL_TYPE}_{epochs}epochs.json",
+    pt.save(
+        model.state_dict(),
+        CHECKPOINT_PATH,
     )
     print("Model saved!")
 
@@ -147,4 +153,4 @@ if __name__ == "__main__":
         num_layers=NUM_LAYERS,
         max_delta=MAX_DELTA,
     )
-    train_es(attack_model, 3)
+    train_es(attack_model, 1)
