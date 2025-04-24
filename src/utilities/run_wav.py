@@ -10,13 +10,7 @@ HOME_PATH = "/home/spoonmilk/university/csci1470/team-yell"
 # MODEL PATH
 MODEL_PATH = f"{HOME_PATH}/src/attacks/checkpoints/wavperturbation_model.pt"
 
-model = WavPerturbationModel(
-    num_layers=3,
-    num_channels=32,
-    kernel_size=3,
-    max_delta=0.01,
-)
-model.load_state_dict(torch.load(MODEL_PATH))
+model = torch.load(MODEL_PATH, weights_only=False)
 model.eval()
 
 waveform, sample_rate = torchaudio.load(

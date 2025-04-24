@@ -141,7 +141,7 @@ def train_es(
         print(f"Epoch {i}/{epochs} — avg WER: {avg_wer:.4f}")
     # Save model
     pt.save(
-        model.state_dict(),
+        model,
         CHECKPOINT_PATH,
     )
     print("Model saved!")
