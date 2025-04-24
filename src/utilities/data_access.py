@@ -10,6 +10,7 @@ try:
 except NameError:
     DATA_DIR = os.path.abspath("../data/") + "/"
 
+os.makedirs(DATA_DIR, exist_ok=True)
 
 def save_data(waves: torch.Tensor, transcripts: list[str]):
     torch.save(waves, DATA_DIR + 'waves.pt')

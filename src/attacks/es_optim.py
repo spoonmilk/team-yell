@@ -6,6 +6,7 @@ from ..utilities.wer import wer
 from ..utilities.preprocess_wav import load_data
 from concurrent.futures import ProcessPoolExecutor
 import random
+from ..utilities.data_access import grab_batch
 
 POP_SIZE = 50
 BATCH_SIZE = 10
@@ -14,6 +15,8 @@ NOISE_MEAN = 0
 NOISE_STD_DEV_RNG_PORTION = 0.05
 MODEL_TYPE = "tiny"
 NUM_WORKERS = 5
+
+whisper_model = whisper.load_model(MODEL_TYPE)
 
 def whisper_transcribe(audio_data: pt.Tensor) -> list[str]:
     """Transcribes all audio sequences encapsulated within an input tensor and returns whisper's transcriptions of them"""
