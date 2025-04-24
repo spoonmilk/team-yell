@@ -16,7 +16,10 @@ NUM_WORKERS = 5
 NUM_EPOCHS = 100
 
 # MODEL PARAMETERS
-
+NUM_LAYERS = 3
+NUM_CHANNELS = 32
+KERNEL_SIZE = 3
+MAX_DELTA = 0.01
 
 # Load Whisper
 device = "cuda" if pt.cuda.is_available() else "cpu"
@@ -139,9 +142,9 @@ def train_es(
 if __name__ == "__main__":
     # build fresh attack model
     attack_model = WavPerturbationModel(
-        kernel_size=3,
-        num_channels=32,
-        num_layers=4,
-        max_delta=0.1,
+        kernel_size=KERNEL_SIZE,
+        num_channels=NUM_CHANNELS,
+        num_layers=NUM_LAYERS,
+        max_delta=MAX_DELTA,
     )
     train_es(attack_model, 3)
