@@ -103,6 +103,7 @@ class WavPerturbationModel(nn.Module):
         num_layers: int,
         max_delta: float,
     ):
+        super().__init__()
         layers: list[nn.Module] = []
         entry_layer = nn.Conv1d(
             in_channels=1,
@@ -130,10 +131,14 @@ class WavPerturbationModel(nn.Module):
             padding=kernel_size // 2,
         )
         layers.append(exit_layer)
-        layers.append(nn.ReLU(inplace=True))
         self.model = nn.Sequential(*layers)
         self.max_delta = max_delta
-        self.options = (kernel_size, num_channels, num_layers, max_delta)  # Added this to make model copying easier
+        self.options = (
+            kernel_size,
+            num_channels,
+            num_layers,
+            max_delta,
+        )  # Added this to make model copying easier
 
     def forward(self, in_waveform: pt.Tensor) -> pt.Tensor:
         """
@@ -157,4 +162,4 @@ class WavPerturbationModel(nn.Module):
         x = self.model(x)
         # Clamp to +- max_delta
         x = x.tanh() * self.max_delta
-        return x.squeeze(1) if in_waveform.ndim == 2 else x
+        return x.squeeze(1) if in_waveform.ndim == 3 else x
