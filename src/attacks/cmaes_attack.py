@@ -77,8 +77,7 @@ def cmaes(model: WavPerturbationModel, generations: int):
             x = optimizer.ask()
             value = objective(model, generation_batch, x)
             solutions.append((x, value))
-
-            print(f"{generation=} {value=}")
+        print("Generation", generation, ": Mean value:", np.mean([sol[1] for sol in solutions]))
         optimizer.tell(solutions)
     # Now our optimizer has been nice and trained, ask it for a set of params one more time and build a model with it: return that.
     return build_from_params(model, optimizer.ask())
