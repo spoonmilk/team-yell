@@ -15,11 +15,6 @@ NOISE_STD_DEV_RNG_PORTION = 0.05
 MODEL_TYPE = "tiny"
 NUM_WORKERS = 5
 
-whisper_model = whisper.load_model(MODEL_TYPE)
-waves, transcripts = load_data()
-assert len(waves) == len(transcripts)
-
-
 def whisper_transcribe(audio_data: pt.Tensor) -> list[str]:
     """Transcribes all audio sequences encapsulated within an input tensor and returns whisper's transcriptions of them"""
     sized_data = whisper.pad_or_trim(audio_data)
@@ -28,15 +23,6 @@ def whisper_transcribe(audio_data: pt.Tensor) -> list[str]:
     ).to(whisper_model.device)
     results = whisper.decode(whisper_model, log_mel_data, whisper.DecodingOptions())
     return results
-
-
-def grab_batch(batch_sz: int) -> tuple[pt.Tensor, list[str]]:
-    """Size of batch -> list of audio tensors correlated with list of transcriptions"""
-    indices = random.sample(range(len(transcripts)), batch_sz)
-    batch_waves = pt.gather(waves, 0, indices)
-    batch_trans = [transcripts[idx] for idx in indices]
-    return batch_waves, batch_trans
-
 
 def noise_params(model: nn.Module):
     device = next(model.parameters()).device
@@ -61,7 +47,7 @@ def epoch(
     clean_audio_batch, transcriptions = grab_batch(batch_sz)
     clean_audio_batch = clean_audio_batch.to(device)
 
-    # Run clean audio through whisper - COMPUTE INTENSIVE
+    # Run clean audio through whisper - COMPUTE INTENSIVE - x this
     clean_whisper_preds = []
     for audio in clean_audio_batch:
         whisper_transcription = whisper_transcribe(audio)

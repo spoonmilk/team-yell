@@ -8,15 +8,14 @@ from typing import Iterator, Any, Tuple, List
 import random
 import torchaudio
 import pickle
+from .data_access import save_data
 
 # Path to LibriSpeech dev-clean folder (adjust as needed)
 try:
     BASE_DIR = Path(__file__).resolve().parent.parent
     AUDIO_DIR = str(BASE_DIR / "LibriSpeech" / "dev-clean") + "/"
-    DATA_DIR = str(BASE_DIR / "data") + "/"
 except NameError:
     AUDIO_DIR = os.path.abspath("../LibriSpeech/dev-clean/") + "/"
-    DATA_DIR = os.path.abspath("../data/") + "/"
 
 # Number of threads for parallel I/O
 NUM_WORKERS = 5
@@ -162,20 +161,13 @@ def grab_waveforms(num_files: int) -> Tuple[torch.Tensor, list[str]]:
     batch = torch.stack(waves, dim=0)  # (B, 1, MAX_LEN)
     return batch, trans
 
-def save_data(waves: torch.Tensor, transcripts: list[str]):
-    torch.save(waves, DATA_DIR + 'waves.pt')
-    with open(DATA_DIR + 'transcripts.pkl', 'wb') as fl:
-        pickle.dump(transcripts, fl)
-
-def load_data() -> tuple[torch.Tensor, list[str]]:
-    waves = torch.load(DATA_DIR + 'waves.pt')
-    with open(DATA_DIR + 'transcripts.pkl', 'rb') as fl:
-        transcripts = pickle.load(fl)
-    return waves, transcripts
-
-
 # Demo
 if __name__ == "__main__":
-    batch, transcripts = grab_waveforms(8)
-    print("Batch shape:", batch.shape)  # e.g., (8, 1, 80000)
-    print("First transcript:", transcripts[0])
+    # batch, transcripts = grab_waveforms(8)
+    # print("Batch shape:", batch.shape)  # e.g., (8, 1, 80000)
+    # print("First transcript:", transcripts[0])
+    waves, trans = grab_waveforms(2703)
+    save_data(waves, trans)
+
+
+
