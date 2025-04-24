@@ -103,6 +103,7 @@ class WavPerturbationModel(nn.Module):
         num_layers: int,
         max_delta: float,
     ):
+        super().__init__()
         layers: list[nn.Module] = []
         entry_layer = nn.Conv1d(
             in_channels=1,
@@ -157,4 +158,4 @@ class WavPerturbationModel(nn.Module):
         x = self.model(x)
         # Clamp to +- max_delta
         x = x.tanh() * self.max_delta
-        return x.squeeze(1) if in_waveform.ndim == 2 else x
+        return x.squeeze(1) if in_waveform.ndim == 3 else x

@@ -12,16 +12,19 @@ except NameError:
 
 os.makedirs(DATA_DIR, exist_ok=True)
 
+
 def save_data(waves: torch.Tensor, transcripts: list[str]):
     torch.save(waves, DATA_DIR + 'waves.pt')
     with open(DATA_DIR + 'transcripts.pkl', 'wb') as fl:
         pickle.dump(transcripts, fl)
+
 
 def load_data() -> tuple[torch.Tensor, list[str]]:
     waves = torch.load(DATA_DIR + 'waves.pt')
     with open(DATA_DIR + 'transcripts.pkl', 'rb') as fl:
         transcripts = pickle.load(fl)
     return waves, transcripts
+
 
 if Path(DATA_DIR + 'transcripts.pkl').is_file() and Path(DATA_DIR + 'waves.pt').is_file():
     waves, transcripts = load_data()
@@ -32,4 +35,4 @@ if Path(DATA_DIR + 'transcripts.pkl').is_file() and Path(DATA_DIR + 'waves.pt').
         indices = random.sample(range(len(transcripts)), batch_sz)
         batch_waves = [waves[idx] for idx in indices]
         batch_trans = [transcripts[idx] for idx in indices]
-        return batch_waves, batch_trans
+        return torch.stack(batch_waves), batch_trans

@@ -11,7 +11,7 @@ BATCH_SIZE = 10
 CMAES_SIGMA = 2
 MODEL_TYPE = "tiny"
 
-whisper_model = whisper.load_model(MODEL_TYPE)
+whisper_model = whisper.load_model(MODEL_TYPE, device="cuda")
 
 
 def whisper_transcribe(audio_data: pt.Tensor) -> list[str]:
@@ -20,7 +20,7 @@ def whisper_transcribe(audio_data: pt.Tensor) -> list[str]:
     log_mel_data = whisper.log_mel_spectrogram(
         sized_data, n_mels=whisper_model.dims.n_mels
     ).to(whisper_model.device)
-    results = whisper.decode(whisper_model, log_mel_data, whisper.DecodingOptions())
+    results = list(map(lambda x: x.text, whisper.decode(whisper_model, log_mel_data, whisper.DecodingOptions())))
     return results
 
 
@@ -56,8 +56,7 @@ def objective(model: WavPerturbationModel, batch: tuple[pt.Tensor, list[str]], p
     pert = copy(audio)
     # Run our perturbed audio through Whisper
     whispered_perts = whisper_transcribe(pert)
-
-    errors = map(wer, labels, whispered_perts)
+    errors = list(map(wer, labels, whispered_perts))
     return -np.mean(errors)
 
 
@@ -79,7 +78,7 @@ def cmaes(model: WavPerturbationModel, generations: int):
             value = objective(model, generation_batch, x)
             solutions.append((x, value))
 
-            print(f"{generation=} {value=} {x=}")
+            print(f"{generation=} {value=}")
         optimizer.tell(solutions)
     # Now our optimizer has been nice and trained, ask it for a set of params one more time and build a model with it: return that.
     return build_from_params(model, optimizer.ask())
@@ -87,6 +86,5 @@ def cmaes(model: WavPerturbationModel, generations: int):
 
 # Demo to run CMAES
 if __name__ == "__main__":
-    print("Running")
     model = WavPerturbationModel(3, 3, 3, 0.1)
-    cmaes(model, 3)
+    cmaes(model, 100)
