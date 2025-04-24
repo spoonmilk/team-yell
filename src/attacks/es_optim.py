@@ -3,11 +3,9 @@ from torch import nn
 import whisper
 from ..models.perturbation_model import WavPerturbationModel
 from ..utilities.wer import wer
-from ..utilities.preprocess_wav import load_data
-from concurrent.futures import ProcessPoolExecutor
-import random
 from ..utilities.data_access import grab_batch
 
+# TRAINING HYPERPARAMETERS
 POP_SIZE = 50
 BATCH_SIZE = 10
 LEARNING_RATE = 0.01
@@ -15,17 +13,33 @@ NOISE_MEAN = 0
 NOISE_STD_DEV_RNG_PORTION = 0.05
 MODEL_TYPE = "tiny"
 NUM_WORKERS = 5
+NUM_EPOCHS = 100
 
+# MODEL PARAMETERS
+
+
+# Load Whisper
+device = "cuda" if pt.cuda.is_available() else "cpu"
 whisper_model = whisper.load_model(MODEL_TYPE)
+
 
 def whisper_transcribe(audio_data: pt.Tensor) -> list[str]:
     """Transcribes all audio sequences encapsulated within an input tensor and returns whisper's transcriptions of them"""
-    sized_data = whisper.pad_or_trim(audio_data)
-    log_mel_data = whisper.log_mel_spectrogram(
-        sized_data, n_mels=whisper_model.dims.n_mels
-    ).to(whisper_model.device)
-    results = whisper.decode(whisper_model, log_mel_data, whisper.DecodingOptions())
-    return results
+    transcripts = []
+    for audio in audio_data:
+        # ensure 1-D CPU numpy
+        audio = audio.squeeze().cpu()
+        audio = whisper.pad_or_trim(audio)
+        mel = whisper.log_mel_spectrogram(audio).to(whisper_model.device)
+        # make sure shape is [n_mels, T]
+        if mel.ndim == 3:
+            mel = mel[0]
+        opts = whisper.DecodingOptions()
+        result = whisper.decode(whisper_model, mel, opts)
+        # decode returns a single DecodingResult
+        transcripts.append(result.text)
+    return transcripts
+
 
 def noise_params(model: nn.Module):
     device = next(model.parameters()).device
@@ -38,67 +52,7 @@ def noise_params(model: nn.Module):
             data.add_(noise)
 
 
-def epoch(
-    model: WavPerturbationModel,
-    pop_sz: int = POP_SIZE,
-    batch_sz: int = BATCH_SIZE,
-    # learning_rate: float = LEARNING_RATE,
-):
-    device = next(model.parameters()).device
-
-    # Grab batch of audio + transcriptions - NOT COMPUTE INTENSIVE
-    clean_audio_batch, transcriptions = grab_batch(batch_sz)
-    clean_audio_batch = clean_audio_batch.to(device)
-
-    # Run clean audio through whisper - COMPUTE INTENSIVE - x this
-    clean_whisper_preds = []
-    for audio in clean_audio_batch:
-        whisper_transcription = whisper_transcribe(audio)
-        clean_whisper_preds.append(whisper_transcription)
-
-    # Create population of cloned + noised models - NOT COMPUTE INTENSIVE
-    population = []
-    for _ in range(pop_sz):
-        copy = WavPerturbationModel(*model.options)
-        copy.load_state_dict(model.state_dict())
-        noise_params(copy)
-        population.append(copy)
-
-    # Run perturbed audio through whisper - COMPUTE INTENSIVE
-    def worker(pop_model: WavPerturbationModel):
-        pert = pop_model(clean_audio_batch)
-        return whisper_transcribe(pert)
-
-    with ProcessPoolExecutor(max_workers=NUM_WORKERS) as exe:
-        all_perturb_preds = list(exe.map(worker, population))
-
-    # Use WER to see how well each model did - NOT COMPUTE INTENSIVE
-    scores = pt.tensor(
-        [
-            compute_reward(clean_whisper_preds, perturbed_preds)
-            for perturbed_preds in all_perturb_preds
-        ],
-        device=device,
-    )
-    # Compute fitness of each model - NOT COMPUTE INTENSIVE
-    fitness = pt.exp(scores).clone()
-    model_weightings = fitness / pt.sum(fitness)
-
-    # Update model weights
-    with pt.no_grad():
-        params = list(model.parameters())
-        for idx, p in enumerate(params):
-            child_params = pt.stack(
-                [list(pop.parameters())[idx].data for pop in population], dim=0
-            )
-            diffs = child_params - p.data.unsqueeze(0)
-            # broadcast weights
-            w = model_weightings.view(-1, *([1] * (diffs.dim() - 1)))
-            step = (w * diffs).sum(0)
-            p.data.add_(LEARNING_RATE * step)
-
-
-def compute_reward(clean_transcription, perturbed_transcription):
+def compute_reward(clean_transcription: list[str], perturbed_transcription: list[str]):
     """
     Compute the reward for the perturbed transcription.
 
@@ -112,3 +66,80 @@ def compute_reward(clean_transcription, perturbed_transcription):
         w_clipped = min(w, 1.0)
         wers.append(w_clipped)
     return sum(wers) / len(wers)
+
+
+def epoch(
+    model: WavPerturbationModel,
+    pop_sz: int = POP_SIZE,
+    batch_sz: int = BATCH_SIZE,
+    learning_rate: float = LEARNING_RATE,
+):
+    device = next(model.parameters()).device
+
+    # Grab batch of audio + transcriptions - NOT COMPUTE INTENSIVE
+    clean_audio_batch, transcriptions = grab_batch(batch_sz)
+    clean_audio_batch = pt.stack([a.to(device) for a in clean_audio_batch], dim=0)
+
+    # Create population of cloned + noised models - NOT COMPUTE INTENSIVE
+    population = []
+    for _ in range(pop_sz):
+        copy = WavPerturbationModel(*model.options)
+        copy.load_state_dict(model.state_dict())
+        noise_params(copy)
+        population.append(copy)
+
+    # Run perturbed audio through whisper - COMPUTE INTENSIVE
+    all_preds = []
+    with pt.inference_mode():
+        for child in population:
+            perturbed = child(clean_audio_batch)
+            preds = whisper_transcribe(perturbed)  # this calls whisper.decode()
+            all_preds.append(preds)
+
+    scores = pt.tensor(
+        [compute_reward(transcriptions, preds) for preds in all_preds], device=device
+    )
+    fitness = pt.exp(scores)  # can experiment with other transforms
+    weights = fitness / fitness.sum()  # normalized
+
+    # Update model weights
+    with pt.no_grad():
+        params = list(model.parameters())
+        for idx, p in enumerate(params):
+            child_params = pt.stack(
+                [list(pop.parameters())[idx].data for pop in population], dim=0
+            )
+            diffs = child_params - p.data.unsqueeze(0)
+            # broadcast weights
+            w = weights.view(-1, *([1] * (diffs.dim() - 1)))
+            step = (w * diffs).sum(0)
+            p.data.add_(LEARNING_RATE * step)
+
+    return float(scores.mean().cpu())
+
+
+def train_es(
+    model: WavPerturbationModel,
+    epochs: int = NUM_EPOCHS,
+):
+    print(f"Starting ES training on device={device}")
+    for i in range(1, epochs + 1):
+        avg_wer = epoch(model, POP_SIZE, BATCH_SIZE, LEARNING_RATE)
+        print(f"Epoch {i:3d}/{epochs:3d} — avg WER: {avg_wer:.4f}")
+    # Save model
+    model.save_model(
+        f",/checkpoints/wavperturbation_model_{MODEL_TYPE}_{epochs}epochs.pt",
+        f"./checkpoints/wavperturbation_model_{MODEL_TYPE}_{epochs}epochs.json",
+    )
+    print("Model saved!")
+
+
+if __name__ == "__main__":
+    # build fresh attack model
+    attack_model = WavPerturbationModel(
+        kernel_size=3,
+        num_channels=16,
+        num_layers=3,
+        max_delta=0.2,
+    )
+    train_es(attack_model)
