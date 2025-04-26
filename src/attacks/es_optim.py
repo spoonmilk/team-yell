@@ -1,11 +1,13 @@
-import torch as pt
-from torch import nn
-import whisper
-from ..models.perturbation_model import WavPerturbationModel
-from ..utilities.wer import wer
-from ..utilities.data_access import grab_batch
-from pathlib import Path
 import os
+from pathlib import Path
+
+import torch as pt
+import whisper
+from torch import nn
+
+from ..models.perturbation_model import WavPerturbationModel
+from ..utilities.data_access import grab_batch
+from ..utilities.wer import wer
 
 # POTENTIAL REASONS FOR APPARENT NON-LEARNING
 # - Not enough epochs/training time
@@ -29,7 +31,7 @@ NUM_EPOCHS = 100
 NUM_LAYERS = 3
 NUM_CHANNELS = 32
 KERNEL_SIZE = 3
-MAX_DELTA = 0.01
+MAX_DELTA = 0.1
 
 try:
     BASE_DIR = Path(__file__).resolve().parent
