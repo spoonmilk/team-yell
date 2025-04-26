@@ -52,7 +52,6 @@ class SpectroPerturbationModel(nn.Module):
             padding=(kernel_size[0] // 2, kernel_size[1] // 2),
         )
         layers.append(exit_layer)
-        layers.append(nn.ReLU(inplace=True))
 
         self.model = nn.Sequential(*layers)
         self.db_max = db_max
@@ -81,7 +80,6 @@ class SpectroPerturbationModel(nn.Module):
         # Clamp to +- db_max
         x = x.tanh() * self.db_max
         return x.squeeze(1) if in_spectrogram.ndim == 3 else x
-
 
 class WavPerturbationModel(nn.Module):
     """

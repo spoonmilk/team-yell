@@ -66,3 +66,4 @@ data/
 
 #Annoying DS store files
 .DS_store
+train-es.sh
