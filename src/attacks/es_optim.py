@@ -7,6 +7,14 @@ from ..utilities.data_access import grab_batch
 from pathlib import Path
 import os
 
+# POTENTIAL REASONS FOR APPARENT NON-LEARNING
+# - Not enough epochs/training time
+# - Model too complex (too many weights could lead to slow convergence for ES if you think about it)
+# - Learning too slow - might need to increase learning rate
+# - Max delta too big - might need to loosen max delta restriction
+# - Every population member takes a step in the wrong direction so model as a whole does - might need to increase population size
+# - Loss function not fine-grained enough for learning to take place
+
 # TRAINING HYPERPARAMETERS
 POP_SIZE = 50
 BATCH_SIZE = 10
@@ -23,7 +31,6 @@ NUM_CHANNELS = 32
 KERNEL_SIZE = 3
 MAX_DELTA = 0.01
 
-
 try:
     BASE_DIR = Path(__file__).resolve().parent
     CHECKPOINT_PATH = str(BASE_DIR / "checkpoints" / "wavperturbation_model.pt")
@@ -38,7 +45,6 @@ except NameError:
 # Load Whisper
 device = "cuda" if pt.cuda.is_available() else "cpu"
 whisper_model = whisper.load_model(MODEL_TYPE)
-
 
 #NOT CHECKED
 def whisper_transcribe(audio_data: pt.Tensor) -> list[str]:
