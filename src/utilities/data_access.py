@@ -1,5 +1,6 @@
 import random
 import torch
+import numpy as np
 import pickle
 from pathlib import Path
 import os
@@ -30,6 +31,11 @@ if Path(DATA_DIR + 'transcripts.pkl').is_file() and Path(DATA_DIR + 'waves.pt').
     def grab_batch(batch_sz: int) -> tuple[torch.Tensor, list[str]]:
         """Size of batch -> list of audio tensors correlated with list of transcriptions"""
         indices = random.sample(range(len(transcripts)), batch_sz)
-        batch_waves = [waves[idx] for idx in indices]
+        batch_waves = torch.stack([waves[idx] for idx in indices], 0)
         batch_trans = [transcripts[idx] for idx in indices]
         return batch_waves, batch_trans
+    
+    # def batches(batch_sz: int, num_batches: int = None):
+    #     assert num_batches*batch_sz <= len(transcripts) #Must be enough possible batches in the first place
+    #     indices = np.arange(len(transcripts))
+    #     while (len(indices) >= batch_sz) or 
