@@ -118,15 +118,16 @@ def epoch(
     # Update model weights
     with pt.no_grad():
         params = list(model.parameters())
-        for idx, p in enumerate(params):
+        for idx, parent_p in enumerate(params):
             child_params = pt.stack(
                 [list(pop.parameters())[idx].data for pop in population], dim=0
             )
-            diffs = child_params - p.data.unsqueeze(0)
-            # broadcast weights
-            w = weights.view(-1, *([1] * (diffs.dim() - 1)))
-            step = (w * diffs).sum(0)
-            p.data.add_(LEARNING_RATE * step)
+            delta_p = child_params - parent_p.data.unsqueeze(0)
+            # Broadcasting weight shape
+            weights_bc = weights.view(-1, *([1] * (delta_p.dim() - 1)))
+            # Weighted sum of weights
+            step = (weights_bc * delta_p).sum(0)
+            parent_p.data.add_(step)
 
     return float(scores.mean().cpu())
 

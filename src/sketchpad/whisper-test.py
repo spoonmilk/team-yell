@@ -5,7 +5,7 @@ model = whisper.load_model("tiny")
 
 # Grab data from scratch
 audio = whisper.load_audio(
-    "/home/spoonmilk/university/csci1470/team-yell/data/LibriSpeech/dev-clean/174/50561/174-50561-0000.flac"
+    "/home/spoonmilk/university/csci1470/team-yell/src/LibriSpeech/dev-clean/174/50561/174-50561-0000.flac"
 )
 audio = whisper.pad_or_trim(audio)
 
