@@ -122,8 +122,7 @@ def epoch(
             child_params = pt.stack(
                 [list(pop.parameters())[idx].data for pop in population], dim=0
             )
-            delta_p = child_params - parent_p.data.unsqueeze(0)
-            # Broadcasting weight shape
+            delta_p = child_params - parent_p.data
             weights_bc = weights.view(-1, *([1] * (delta_p.dim() - 1)))
             # Weighted sum of weights
             step = (weights_bc * delta_p).sum(0)
