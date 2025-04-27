@@ -32,7 +32,7 @@ NOISE_MEAN = 0
 NOISE_STD_DEV_RNG_PORTION = 0.05
 MODEL_TYPE = "tiny"
 NUM_WORKERS = 5
-NUM_EPOCHS = 100
+NUM_EPOCHS = 2
 
 # MODEL PARAMETERS
 NUM_LAYERS = 3
@@ -86,6 +86,31 @@ def noise_params(model: nn.Module):
             noise = pt.randn_like(data, device=device) * std_dev
             data.add_(noise)
 
+#LOGIT LOSS FUNCTIONS
+def extract_logits(perturbed_audio: pt.Tensor):
+    """Takes in a perturbed audio and ground truth transcription, outputting the logits of Whisper's forward pass"""
+    tokenizer = whisper.tokenizer.get_tokenizer(
+        multilingual=True, task="transcribe", language="en"
+    )
+    tokens = pt.tensor([[tokenizer.sot]], device=whisper_model.device)
+
+    # Reset whisper model gradients
+    whisper_model.zero_grad()
+    # Get whisper transcription logits
+    sized_audio = whisper.pad_or_trim(perturbed_audio)
+    mel = whisper.log_mel_spectrogram(sized_audio, n_mels=whisper_model.dims.n_mels).to(
+        whisper_model.device
+    )
+    whisper_logits = whisper_model.forward(mel, tokens)
+    return whisper_logits
+
+def logit_entropy(logits: pt.Tensor):
+    """Returns the entropy of produced Whisper logits"""
+    # Get probabilities from logits
+    log_probs = pt.functional.log_softmax(logits)
+    # Take entropy across
+    entropy = (-(log_probs * pt.exp(log_probs)).sum(dim=-1)).mean()
+    return entropy
 
 #CHECKED - NOTE: very heavily penalizes missed words (all words afterwards are considered incorrect)
 def compute_reward(clean_transcription: list[str], perturbed_transcription: list[str]) -> list[float]:
@@ -105,7 +130,7 @@ def compute_reward(clean_transcription: list[str], perturbed_transcription: list
 
 #CHECKED
 def create_population(model: WavPerturbationModel, pop_sz: int) -> list[WavPerturbationModel]:
-    population = [] 
+    population = []
     for _ in range(pop_sz):
         copy = WavPerturbationModel(*model.options)
         copy.load_state_dict(model.state_dict())
@@ -132,6 +157,7 @@ def epoch(
     model: WavPerturbationModel,
     pop_sz: int = POP_SIZE,
     batch_sz: int = BATCH_SIZE,
+    train_type: str = "transcript"
 ):
     device = next(model.parameters()).device
     # Grab batch of audio + transcriptions - NOT COMPUTE INTENSIVE
@@ -141,21 +167,22 @@ def epoch(
     # Create population of cloned + noised models - NOT COMPUTE INTENSIVE
     population = create_population(model, pop_sz)
 
-    # Run perturbed audio through whisper - COMPUTE INTENSIVE
-    all_preds = []
+    perturbed_list = []
     with pt.inference_mode():
         for child in population:
-            perturbed = child(
-                clean_audio_batch
-            )  # this calls model.forward() which produces a residual
-            # Add the residual to the clean audio
-            perturbed = clean_audio_batch + perturbed
-            preds = whisper_transcribe(perturbed)  # this calls whisper.decode()
-            all_preds.append(preds)
+            delta = child(clean_audio_batch)
+            perturbed_list.append(clean_audio_batch + delta)
 
-    scores = pt.tensor(
-        [compute_reward(transcriptions, preds) for preds in all_preds], device=device
-    )
+    # 2) compute scores via the chosen reward
+    if train_type == "transcript":
+        preds = [whisper_transcribe(x) for x in perturbed_list]
+        scores = pt.tensor([compute_reward(transcriptions, p) for p in preds], device=device)
+    elif train_type == "logit":
+        logits = [extract_logits(x) for x in perturbed_list]
+        scores = pt.tensor([logit_entropy(logit) for logit in logits], device=device)
+    else:
+        raise ValueError("Invalid training type. Choose transcript or logit.")
+
     fitness = pt.exp(scores)
     weights = fitness / fitness.sum()
 
@@ -168,6 +195,7 @@ def epoch(
 def train_es(
     model: WavPerturbationModel,
     epochs: int = NUM_EPOCHS,
+    type: str = "transcript",
 ):
     print(f"Starting ES training on device={device}")
     for i in range(1, epochs + 1):
@@ -189,4 +217,4 @@ if __name__ == "__main__":
         num_layers=NUM_LAYERS,
         max_delta=MAX_DELTA,
     )
-    train_es(attack_model, 4)
+    train_es(attack_model, NUM_EPOCHS, "logit")
