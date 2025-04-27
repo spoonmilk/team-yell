@@ -1,10 +1,10 @@
 import os
 from pathlib import Path
 
+import numpy as np
 import torch as pt
 import whisper
 from torch import nn
-import numpy as np
 
 from ..models.perturbation_model import WavPerturbationModel
 from ..utilities.data_access import grab_batch
@@ -33,7 +33,7 @@ NOISE_MEAN = 0
 NOISE_STD_DEV_RNG_PORTION = 0.05
 MODEL_TYPE = "tiny"
 NUM_WORKERS = 5
-NUM_EPOCHS = 5
+NUM_EPOCHS = 20
 PERFORMANCE_CUTOFF = 0.1
 SCALE_FACTOR = 0.5
 
@@ -41,7 +41,7 @@ SCALE_FACTOR = 0.5
 NUM_LAYERS = 3
 NUM_CHANNELS = 32
 KERNEL_SIZE = 3
-MAX_DELTA = 0.1
+MAX_DELTA = 0.05
 
 try:
     BASE_DIR = Path(__file__).resolve().parent
@@ -84,9 +84,9 @@ def whisper_transcribe(audio_data: pt.Tensor) -> list[str]:
 def noise_params(model: nn.Module, epoch: int = 0):
     device = next(model.parameters()).device
     with pt.no_grad():
-        sigma = annealed_sigma(epoch, NUM_EPOCHS)
+        strength = mutation_strength(epoch, NUM_EPOCHS)
         for param in model.parameters():
-            param.data.add_(pt.randn_like(param, device=device) * sigma)
+            param.data.add_(pt.randn_like(param, device=device) * strength)
 
 
 # LOGIT LOSS FUNCTIONS
@@ -194,7 +194,7 @@ def scores_to_weights(
     return pt.softmax(filtered / scale_factor, dim=0)
 
 
-def annealed_sigma(epoch, total_epochs, sig_o=0.5, sig_t=0.01):
+def mutation_strength(epoch, total_epochs, sig_o=0.5, sig_t=0.01):
     t = epoch / total_epochs
     return sig_o * (1 - t) + sig_t * t
 

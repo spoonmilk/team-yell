@@ -81,6 +81,7 @@ class SpectroPerturbationModel(nn.Module):
         x = x.tanh() * self.db_max
         return x.squeeze(1) if in_spectrogram.ndim == 3 else x
 
+
 class WavPerturbationModel(nn.Module):
     """
     1D CNN that takes a waveform (B, 1, T)
