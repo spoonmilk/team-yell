@@ -67,3 +67,6 @@ data/
 #Annoying DS store files
 .DS_store
 train-es.sh
+
+#Api keys
+api_keys.txt

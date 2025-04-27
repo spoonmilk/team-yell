@@ -24,6 +24,7 @@ from ..utilities.wer import wer
 # - Create testing utility with access to different speech to text models
 # - Finish batcher
 # - Create other perturbation models
+# - Clean functions
 
 # TRAINING HYPERPARAMETERS
 POP_SIZE = 50

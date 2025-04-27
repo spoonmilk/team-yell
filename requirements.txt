@@ -10,3 +10,5 @@ cmaes==0.11.1
 
 # Whisper from GitHub
 git+https://github.com/openai/whisper.git
+# Other speech to text models
+assemblyai==0.40.2
