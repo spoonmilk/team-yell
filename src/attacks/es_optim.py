@@ -5,6 +5,8 @@ import numpy as np
 import torch as pt
 import whisper
 from torch import nn
+from pystoi import stoi
+import torchaudio
 
 from ..models.perturbation_model import WavPerturbationModel
 from ..utilities.data_access import grab_batch
@@ -58,6 +60,23 @@ except NameError:
 # Load Whisper
 device = "cuda" if pt.cuda.is_available() else "cpu"
 whisper_model = whisper.load_model(MODEL_TYPE)
+
+mel_spec = torchaudio.transforms.MelSpectrogram(
+    sample_rate=16000, n_fft=512, hop_length=128, n_mels=64
+)
+
+mel_weights = pt.tensor(
+    [1.0 if 300 <= (i / 64) * 8000 <= 3000 else 0.5 for i in range(64)]
+).view(1, 64, 1)  # shape (1, F, 1)
+
+
+def pad_to_length(sig: np.ndarray, min_len: int) -> np.ndarray:
+    if sig.ndim != 1:
+        sig = sig.flatten()
+    if sig.shape[0] < min_len:
+        pad_amt = min_len - sig.shape[0]
+        return np.pad(sig, (0, pad_amt), mode="constant")
+    return sig
 
 
 # NOT CHECKED
@@ -132,8 +151,8 @@ def compute_logit_reward(
     perturbed_audio: pt.Tensor,
     logits: pt.Tensor,
     adversarial_bonus: float = 1.0,
-    distortion_penalty: float = 0.8,
-    hf_incentive: float = 1.0,
+    distortion_penalty: float = 0.5,
+    hf_incentive: float = 0.5,
 ):
     """
     Computes a multi-factor reward for the perturbed audio.
@@ -150,28 +169,23 @@ def compute_logit_reward(
     """
     entropy = logit_entropy(logits)
     # Take mean squared change between clean and perturbed audio
-    delta = pt.mean(pt.square(perturbed_audio - clean_audio))
+    clean_mel = mel_spec(clean_audio)  # (1, F, N)
+    pert_mel = mel_spec(perturbed_audio)  # (1, F, N)
+    mel_mse = (mel_weights * (pert_mel - clean_mel) ** 2).mean()
 
-    spec = pt.stft(
-        perturbed_audio.squeeze(1), n_fft=256, hop_length=128, return_complex=True
-    )
-    mag = spec.abs()
+    clean_np = clean_audio.squeeze().cpu().numpy()
+    pert_np = perturbed_audio.squeeze().cpu().numpy()
 
-    # High frequency cutoff
-    # Tune for intelligibility
-    freq_high = 0.95
-    cutoff_idx = int(freq_high * mag.size(1))
+    # Pad to 16000 samples for STOI
+    clean_np = pad_to_length(clean_np, 16000)
+    pert_np = pad_to_length(pert_np, 16000)
 
-    # We incentivize high frequency energy and penalize low frequency energy
-    low_eng = mag[:, : (mag.size(1) // 2)].mean()
-    high_eng = mag[:, cutoff_idx:].mean()
-    hf_ratio = (high_eng + 1e-8) / (low_eng + 1e-8)
+    s = stoi(clean_np, pert_np, fs_sig=16000, extended=False)
 
-    return (
-        adversarial_bonus * entropy
-        - distortion_penalty * delta
-        + hf_incentive * hf_ratio
-    )
+    # Normalize s to within similar bounds as the other rewards
+    s = (s - 0.3) / (1.0 - 0.3)  # Normalize to [0, 1]
+
+    return adversarial_bonus * entropy - distortion_penalty * mel_mse + hf_incentive * s
 
 
 # CHECKED - NOTE: very heavily penalizes missed words (all words afterwards are considered incorrect)
