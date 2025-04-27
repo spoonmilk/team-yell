@@ -1,9 +1,10 @@
 import torch
 import torchaudio
 import whisper
-from .wer import wer
+
 from ..attacks.es_optim import train_es
 from ..models.perturbation_model import WavPerturbationModel
+from .wer import wer
 
 # PATHS/UTILS
 
@@ -19,21 +20,7 @@ NUM_CHANNELS = 32
 KERNEL_SIZE = 3
 MAX_DELTA = 0.01
 
-# TRAINING PARAMETERS
-NUM_EPOCHS = 1
-
 # TORCHECK CODE
-
-attack_model = WavPerturbationModel(
-        kernel_size=KERNEL_SIZE,
-        num_channels=NUM_CHANNELS,
-        num_layers=NUM_LAYERS,
-        max_delta=MAX_DELTA,
-    )
-
-
-train_es(attack_model, NUM_EPOCHS)
-
 model = torch.load(MODEL_PATH, weights_only=False)
 model.eval()
 
@@ -50,7 +37,7 @@ with torch.no_grad():
     perturbed = waveform.squeeze(1) + residual
 
 torchaudio.save(
-    "/home/spoonmilk/university/csci1470/team-yell/src/data/results/output.wav",
+    f"{HOME_PATH}/src/data/results/output.wav",
     perturbed.cpu(),
     sample_rate,
 )
