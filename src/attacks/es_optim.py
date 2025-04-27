@@ -4,6 +4,7 @@ from pathlib import Path
 import torch as pt
 import whisper
 from torch import nn
+import numpy as np
 
 from ..models.perturbation_model import WavPerturbationModel
 from ..utilities.data_access import grab_batch
@@ -18,7 +19,7 @@ from ..utilities.wer import wer
 # - Loss function not fine-grained enough for learning to take place
 
 # TASKS
-# - Restrict learning to the top 5 or 10 performers
+# - Restrict learning to the top 5 or 10 performers - DONE
 # - Separate training and testing data - DONE
 # - Create testing utility with access to different speech to text models
 # - Finish batcher
@@ -33,6 +34,7 @@ NOISE_STD_DEV_RNG_PORTION = 0.05
 MODEL_TYPE = "tiny"
 NUM_WORKERS = 5
 NUM_EPOCHS = 100
+PERFORMANCE_CUTOFF = 0.2
 
 # MODEL PARAMETERS
 NUM_LAYERS = 3
@@ -128,6 +130,16 @@ def update_model_weights(model: WavPerturbationModel, population: list[WavPertur
             step = (weights_bc * delta_p).sum(0)
             parent_p.data.add_(LEARNING_RATE*step)
 
+#CHECKED
+def scores_to_weights(scores: pt.Tensor) -> pt.Tensor:
+    sorted_scores = pt.sort(scores, descending=True)[0]
+    top_scores = sorted_scores[:int(PERFORMANCE_CUTOFF*scores.shape[0])].numpy()
+    filter_scores = np.vectorize(lambda score: score if (score in top_scores) else 0)
+    scores = pt.tensor(filter_scores(scores.numpy()))
+    fitness = pt.exp(scores) #Can result in NAN if one member of scores is particularly bigger than all the others... we prob don't have to worry about that though
+    weights = fitness / fitness.sum()
+    return weights
+
 def epoch(
     model: WavPerturbationModel,
     pop_sz: int = POP_SIZE,
@@ -156,9 +168,7 @@ def epoch(
     scores = pt.tensor(
         [compute_reward(transcriptions, preds) for preds in all_preds], device=device
     )
-    fitness = pt.exp(scores)
-    weights = fitness / fitness.sum()
-
+    weights = scores_to_weights(scores)
     # Update model weights
     update_model_weights(model, population, weights)
 
