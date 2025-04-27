@@ -17,6 +17,13 @@ from ..utilities.wer import wer
 # - Every population member takes a step in the wrong direction so model as a whole does - might need to increase population size
 # - Loss function not fine-grained enough for learning to take place
 
+# TASKS
+# - Restrict learning to the top 5 or 10 performers
+# - Separate training and testing data - DONE
+# - Create testing utility with access to different speech to text models
+# - Finish batcher
+# - Create other perturbation models
+
 # TRAINING HYPERPARAMETERS
 POP_SIZE = 50
 BATCH_SIZE = 10
