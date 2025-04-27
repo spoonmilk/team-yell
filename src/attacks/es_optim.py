@@ -33,7 +33,7 @@ NOISE_MEAN = 0
 NOISE_STD_DEV_RNG_PORTION = 0.05
 MODEL_TYPE = "tiny"
 NUM_WORKERS = 5
-NUM_EPOCHS = 100
+NUM_EPOCHS = 5
 PERFORMANCE_CUTOFF = 0.2
 
 # MODEL PARAMETERS
@@ -96,22 +96,31 @@ def extract_logits(perturbed_audio: pt.Tensor):
     )
     tokens = pt.tensor([[tokenizer.sot]], device=whisper_model.device)
 
-    # Reset whisper model gradients
-    whisper_model.zero_grad()
-    # Get whisper transcription logits
-    sized_audio = whisper.pad_or_trim(perturbed_audio)
-    mel = whisper.log_mel_spectrogram(sized_audio, n_mels=whisper_model.dims.n_mels).to(
-        whisper_model.device
-    )
-    whisper_logits = whisper_model.forward(mel, tokens)
-    return whisper_logits
+    mels = []
+    for x in perturbed_audio:
+        audio = x.squeeze().cpu()
+        audio = whisper.pad_or_trim(audio)
+        mel = whisper.log_mel_spectrogram(
+            audio, n_mels=whisper_model.dims.n_mels
+        )
+        mels.append(mel)
+    mel_batch = pt.stack(mels, dim=0).to(device)
+    tokens = pt.full((mel_batch.size(0), 1),
+                       tokenizer.sot,
+                       dtype=pt.long,
+                       device=device)
+    with pt.inference_mode():
+        return whisper_model(mel_batch, tokens)
+
 
 def logit_entropy(logits: pt.Tensor):
     """Returns the entropy of produced Whisper logits"""
     # Get probabilities from logits
-    log_probs = pt.functional.log_softmax(logits)
+    probs = pt.nn.functional.softmax(logits, dim=-1)
+    log_probs = pt.nn.functional.log_softmax(logits, dim=-1)
     # Take entropy across
-    entropy = (-(log_probs * pt.exp(log_probs)).sum(dim=-1)).mean()
+    entropy = (probs * log_probs.sum(dim=-1))
+    entropy = -entropy.mean()
     return entropy
 
 #CHECKED - NOTE: very heavily penalizes missed words (all words afterwards are considered incorrect)
@@ -194,9 +203,15 @@ def epoch(
         scores = pt.tensor([logit_entropy(logit) for logit in logits], device=device)
     else:
         raise ValueError("Invalid training type. Choose transcript or logit.")
+
     weights = scores_to_weights(scores)
     # Update model weights
     update_model_weights(model, population, weights)
+
+    if train_type == "logit":
+        print(f"Mean entropy: {scores.mean().cpu()}")
+    else:
+        print(f"Avg WER: {scores.mean().cpu()}")
 
     return float(scores.mean().cpu())
 
@@ -208,8 +223,8 @@ def train_es(
 ):
     print(f"Starting ES training on device={device}")
     for i in range(1, epochs + 1):
-        avg_wer = epoch(model, POP_SIZE, BATCH_SIZE)
-        print(f"Epoch {i}/{epochs} — avg WER: {avg_wer:.4f}")
+        avg_wer = epoch(model, POP_SIZE, BATCH_SIZE, type)
+        # print(f"Epoch {i}/{epochs} — avg WER: {avg_wer:.4f}")
     # Save model
     pt.save(
         model,
@@ -226,4 +241,4 @@ if __name__ == "__main__":
         num_layers=NUM_LAYERS,
         max_delta=MAX_DELTA,
     )
-    train_es(attack_model, NUM_EPOCHS, "logit")
+    train_es(attack_model, NUM_EPOCHS, type="logit")
