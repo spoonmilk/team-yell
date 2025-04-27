@@ -34,7 +34,8 @@ NOISE_STD_DEV_RNG_PORTION = 0.05
 MODEL_TYPE = "tiny"
 NUM_WORKERS = 5
 NUM_EPOCHS = 5
-PERFORMANCE_CUTOFF = 0.2
+PERFORMANCE_CUTOFF = 0.1
+SCALE_FACTOR = 0.5
 
 # MODEL PARAMETERS
 NUM_LAYERS = 3
@@ -57,7 +58,8 @@ except NameError:
 device = "cuda" if pt.cuda.is_available() else "cpu"
 whisper_model = whisper.load_model(MODEL_TYPE)
 
-#NOT CHECKED
+
+# NOT CHECKED
 def whisper_transcribe(audio_data: pt.Tensor) -> list[str]:
     """Transcribes all audio sequences encapsulated within an input tensor and returns whisper's transcriptions of them"""
     transcripts = []
@@ -77,18 +79,17 @@ def whisper_transcribe(audio_data: pt.Tensor) -> list[str]:
         transcripts.append(result.text)
     return transcripts
 
-#CHECKED
-def noise_params(model: nn.Module):
+
+# CHECKED
+def noise_params(model: nn.Module, epoch: int = 0):
     device = next(model.parameters()).device
     with pt.no_grad():
+        sigma = annealed_sigma(epoch, NUM_EPOCHS)
         for param in model.parameters():
-            data = param.data
-            span = (data.max() - data.min()).clamp_min(0.0) #NOTE: this means that some parameters will never have noise added (1x1 bias, eg.)
-            std_dev = span * NOISE_STD_DEV_RNG_PORTION
-            noise = pt.randn_like(data, device=device) * std_dev
-            data.add_(noise)
+            param.data.add_(pt.randn_like(param, device=device) * sigma)
 
-#LOGIT LOSS FUNCTIONS
+
+# LOGIT LOSS FUNCTIONS
 def extract_logits(perturbed_audio: pt.Tensor):
     """Takes in a perturbed audio and ground truth transcription, outputting the logits of Whisper's forward pass"""
     tokenizer = whisper.tokenizer.get_tokenizer(
@@ -100,15 +101,12 @@ def extract_logits(perturbed_audio: pt.Tensor):
     for x in perturbed_audio:
         audio = x.squeeze().cpu()
         audio = whisper.pad_or_trim(audio)
-        mel = whisper.log_mel_spectrogram(
-            audio, n_mels=whisper_model.dims.n_mels
-        )
+        mel = whisper.log_mel_spectrogram(audio, n_mels=whisper_model.dims.n_mels)
         mels.append(mel)
     mel_batch = pt.stack(mels, dim=0).to(device)
-    tokens = pt.full((mel_batch.size(0), 1),
-                       tokenizer.sot,
-                       dtype=pt.long,
-                       device=device)
+    tokens = pt.full(
+        (mel_batch.size(0), 1), tokenizer.sot, dtype=pt.long, device=device
+    )
     with pt.inference_mode():
         return whisper_model(mel_batch, tokens)
 
@@ -119,12 +117,15 @@ def logit_entropy(logits: pt.Tensor):
     probs = pt.nn.functional.softmax(logits, dim=-1)
     log_probs = pt.nn.functional.log_softmax(logits, dim=-1)
     # Take entropy across
-    entropy = (probs * log_probs.sum(dim=-1))
+    entropy = (probs * log_probs).sum(dim=-1)
     entropy = -entropy.mean()
     return entropy
 
-#CHECKED - NOTE: very heavily penalizes missed words (all words afterwards are considered incorrect)
-def compute_reward(clean_transcription: list[str], perturbed_transcription: list[str]) -> list[float]:
+
+# CHECKED - NOTE: very heavily penalizes missed words (all words afterwards are considered incorrect)
+def compute_reward(
+    clean_transcription: list[str], perturbed_transcription: list[str]
+) -> list[float]:
     """
     Compute the reward for the perturbed transcription.
 
@@ -139,19 +140,28 @@ def compute_reward(clean_transcription: list[str], perturbed_transcription: list
         wers.append(w_clipped)
     return sum(wers) / len(wers)
 
-#CHECKED
-def create_population(model: WavPerturbationModel, pop_sz: int) -> list[WavPerturbationModel]:
+
+# CHECKED
+def create_population(
+    model: WavPerturbationModel, pop_sz: int, epoch: int = 0
+) -> list[WavPerturbationModel]:
+    """Creates a population of perturbed models"""
     population = []
     for _ in range(pop_sz):
         copy = WavPerturbationModel(*model.options)
         copy.load_state_dict(model.state_dict())
-        noise_params(copy)
+        noise_params(copy, epoch=epoch)
         population.append(copy)
     return population
 
 
-#CHECKED
-def update_model_weights(model: WavPerturbationModel, population: list[WavPerturbationModel], weights: pt.Tensor):
+# CHECKED
+def update_model_weights(
+    model: WavPerturbationModel,
+    population: list[WavPerturbationModel],
+    weights: pt.Tensor,
+):
+    """Update the model weights based on the population and their scores"""
     with pt.no_grad():
         params = list(model.parameters())
         for idx, parent_p in enumerate(params):
@@ -162,23 +172,39 @@ def update_model_weights(model: WavPerturbationModel, population: list[WavPertur
             weights_bc = weights.view(-1, *([1] * (delta_p.dim() - 1)))
             # Weighted sum of weights
             step = (weights_bc * delta_p).sum(0)
-            parent_p.data.add_(LEARNING_RATE*step)
+            parent_p.data.add_(LEARNING_RATE * step)
 
-#CHECKED
-def scores_to_weights(scores: pt.Tensor) -> pt.Tensor:
+
+def scores_to_weights(
+    scores: pt.Tensor, cutoff: float = PERFORMANCE_CUTOFF, scale_factor: float = 0.1
+) -> pt.Tensor:
     sorted_scores = pt.sort(scores, descending=True)[0]
-    top_scores = sorted_scores[:int(PERFORMANCE_CUTOFF*scores.shape[0])].numpy()
-    filter_scores = np.vectorize(lambda score: score if (score in top_scores) else 0)
-    scores = pt.tensor(filter_scores(scores.numpy()))
-    fitness = pt.exp(scores) #Can result in NAN if one member of scores is particularly bigger than all the others... we prob don't have to worry about that though
-    weights = fitness / fitness.sum()
-    return weights
+    k = max(1, int(cutoff * scores.shape[0]))
+    top_scores = sorted_scores[:k].cpu().numpy()
+
+    # Filter out low performers
+    scores_np = scores.cpu().numpy()
+    filter_fn = np.vectorize(lambda s: s if (s in top_scores) else float("-inf"))
+    filtered_np = filter_fn(scores_np)
+
+    # Convert back to tensor
+    filtered = pt.tensor(filtered_np, device=scores.device)
+
+    # Softmax to get weights
+    return pt.softmax(filtered / scale_factor, dim=0)
+
+
+def annealed_sigma(epoch, total_epochs, sig_o=0.5, sig_t=0.01):
+    t = epoch / total_epochs
+    return sig_o * (1 - t) + sig_t * t
+
 
 def epoch(
     model: WavPerturbationModel,
     pop_sz: int = POP_SIZE,
     batch_sz: int = BATCH_SIZE,
-    train_type: str = "transcript"
+    train_type: str = "transcript",
+    epoch: int = 0,
 ):
     device = next(model.parameters()).device
     # Grab batch of audio + transcriptions - NOT COMPUTE INTENSIVE
@@ -186,7 +212,7 @@ def epoch(
     clean_audio_batch = clean_audio_batch.to(device)
 
     # Create population of cloned + noised models - NOT COMPUTE INTENSIVE
-    population = create_population(model, pop_sz)
+    population = create_population(model, pop_sz, epoch=epoch)
 
     perturbed_list = []
     with pt.inference_mode():
@@ -197,10 +223,19 @@ def epoch(
     # 2) compute scores via the chosen reward
     if train_type == "transcript":
         preds = [whisper_transcribe(x) for x in perturbed_list]
-        scores = pt.tensor([compute_reward(transcriptions, p) for p in preds], device=device)
+        scores = pt.tensor(
+            [compute_reward(transcriptions, p) for p in preds], device=device
+        )
     elif train_type == "logit":
         logits = [extract_logits(x) for x in perturbed_list]
         scores = pt.tensor([logit_entropy(logit) for logit in logits], device=device)
+        print(
+            f"Scores  →  min={scores.min().item():.4f}, "
+            f"max={scores.max().item():.4f}, "
+            f"mean={scores.mean().item():.4f}, "
+            f"max-min={scores.max().item() - scores.min().item():.4f}\n"
+        )
+
     else:
         raise ValueError("Invalid training type. Choose transcript or logit.")
 
@@ -223,7 +258,7 @@ def train_es(
 ):
     print(f"Starting ES training on device={device}")
     for i in range(1, epochs + 1):
-        avg_wer = epoch(model, POP_SIZE, BATCH_SIZE, type)
+        epoch(model, POP_SIZE, BATCH_SIZE, type, epoch=i)
         # print(f"Epoch {i}/{epochs} — avg WER: {avg_wer:.4f}")
     # Save model
     pt.save(
