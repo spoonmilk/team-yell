@@ -146,13 +146,23 @@ def logit_entropy(logits: pt.Tensor):
     return entropy
 
 
+def scheduled_rewards(epoch: int, total_epochs: int) -> tuple[float, float, float]:
+    """
+    Returns the scheduled rewards for the current epoch
+    The rewards are scaled by the mutation strength, which decreases over time.
+    """
+    t = epoch / total_epochs
+    adversarial_bonus = 1.0 * (1 - t) + 0.1 * t
+    distortion_penalty = 0.1 * (1 - t) + 1.0 * t
+    interpretability_incentive = 0.1 * (1 - t) + 1.0 * t
+    return adversarial_bonus, distortion_penalty, interpretability_incentive
+
+
 def compute_logit_reward(
     clean_audio: pt.Tensor,
     perturbed_audio: pt.Tensor,
     logits: pt.Tensor,
-    adversarial_bonus: float = 1.0,
-    distortion_penalty: float = 0.5,
-    interpretability_incentive: float = 0.5,
+    sched_rewards: tuple[float, float, float] = (0.0, 0.0, 0.0),
 ):
     """
     Computes a multi-factor reward for the perturbed audio.
@@ -185,6 +195,7 @@ def compute_logit_reward(
     # Normalize s to within similar bounds as the other rewards
     s = (s - 0.3) / (1.0 - 0.3)  # Normalize to [0, 1]
 
+    adversarial_bonus, distortion_penalty, interpretability_incentive = sched_rewards
     return (
         adversarial_bonus * entropy
         - distortion_penalty * mel_mse
@@ -333,9 +344,15 @@ def epoch(
         )
     elif train_type == "logit":
         logits = [extract_logits(x) for x in perturbed_list]
+        sched_rewards = scheduled_rewards(epoch, NUM_EPOCHS)
         scores = pt.tensor(
             [
-                compute_logit_reward(clean_audio_batch, perturbed_list[i], logits[i])
+                compute_logit_reward(
+                    clean_audio_batch,
+                    perturbed_list[i],
+                    logits[i],
+                    sched_rewards=sched_rewards,
+                )
                 for i in range(len(perturbed_list))
             ],
             device=device,
