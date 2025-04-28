@@ -38,6 +38,12 @@ SPEECHMATICS_API_KEY = ""
 test_waves, test_transcripts = load_data(test=True)
 test_waves = test_waves[:10]
 test_transcripts = test_transcripts[:10]
+transform = AddGaussianNoise(
+    min_amplitude=0.03,
+    max_amplitude=0.045,
+    p=1.0
+)
+noisy_waves = transform(test_waves, 16000)
 
 # GENERAL FUNCTIONS
 
@@ -132,22 +138,32 @@ def test_set_whisper(w_model: whisper.Whisper, audio: pt.Tensor, transcripts: li
     return np.mean(wers)
 
 
-def test_whisper(perturbation_model: pt.nn.Module, whisper_level: str = "tiny"):
+def test_whisper(perturbation_model: pt.nn.Module, whisper_level: str = "tiny", noisy: bool = False):
     print("Loading model at level:", whisper_level)
     whisper_model = whisper.load_model(whisper_level)
     print("Model loaded, running test_set_whisper with the test data")
     unperturbed_wer = test_set_whisper(whisper_model, test_waves, test_transcripts)
     print(f"WHISPER {whisper_level} MODEL UNPERTURBED MEAN_WER: {unperturbed_wer}")
-    print("Running perturbation model to generate perturbed audio of the test_waves")
-    with pt.no_grad():
-        perturbed_waves = perturbation_model(test_waves)
-    print("Running test_set_whisper with perturbed audio")
-    perturbed_wer = test_set_whisper(whisper_model, perturbed_waves, test_transcripts)
-    for i in range(len(perturbed_waves)):
-        torchaudio.save(f"perturbed wav {i}.wav", pt.reshape(perturbed_waves[i], (1, 80000)), 16000)
-        torchaudio.save(f"clean wav {i}.wav", pt.reshape(test_waves[i], (1, 80000)), 16000)
-    print(f"WHISPER {whisper_level} MODEL PERTURBED MEAN_WER: {perturbed_wer}")
-    print(f"WHISPER {whisper_level} MODEL WER DEPROVEMENT WITH PERTURBATION: {perturbed_wer - unperturbed_wer}")
+    if noisy:
+        for i in range(len(noisy_waves)):
+            torchaudio.save(f"noisy wav {i}.wav", pt.unsqueeze(noisy_waves[i], 0), 16000)
+            torchaudio.save(f"clean wav {i}.wav", pt.unsqueeze(test_waves[i], 0), 16000)
+        print("Running test_set_whisper with noisy audio")
+        noisy_wer = test_set_whisper(whisper_model, noisy_waves, test_transcripts)
+        print(f"WHISPER {whisper_level} MODEL NOISY MEAN_WER: {noisy_wer}")
+        print(f"WHISPER {whisper_level} MODEL WER DEPROVEMENT WITH NOISE: {noisy_wer - unperturbed_wer}")
+
+    else:
+        print("Running perturbation model to generate perturbed audio of the test_waves")
+        with pt.no_grad():
+            perturbed_waves = perturbation_model(test_waves)
+        print("Running test_set_whisper with perturbed audio")
+        perturbed_wer = test_set_whisper(whisper_model, perturbed_waves, test_transcripts)
+        for i in range(len(perturbed_waves)):
+            torchaudio.save(f"perturbed wav {i}.wav", pt.unsqueeze(perturbed_waves[i], 0), 16000)
+            torchaudio.save(f"clean wav {i}.wav", pt.unsqueeze(test_waves[i], 0), 16000)
+        print(f"WHISPER {whisper_level} MODEL PERTURBED MEAN_WER: {perturbed_wer}")
+        print(f"WHISPER {whisper_level} MODEL WER DEPROVEMENT WITH PERTURBATION: {perturbed_wer - unperturbed_wer}")
 
 
 def test_noisy_whisper(whisper_level: str = "tiny"):
@@ -157,20 +173,6 @@ def test_noisy_whisper(whisper_level: str = "tiny"):
     print("Model loaded, running test_set_whisper with the test data")
     unperturbed_wer = test_set_whisper(whisper_model, test_waves, test_transcripts)
     print(f"WHISPER {whisper_level} MODEL UNPERTURBED MEAN_WER: {unperturbed_wer}")
-    print("Generating noisy test_waves")
-    transform = AddGaussianNoise(
-        min_amplitude=0.03,
-        max_amplitude=0.045,
-        p=1.0
-    )
-    noisy_waves = transform(test_waves, 16000)
-    for i in range(len(noisy_waves)):
-        torchaudio.save(f"noisy wav {i}.wav", pt.reshape(noisy_waves[i], (1, 80000)), 16000)
-        torchaudio.save(f"clean wav {i}.wav", pt.reshape(test_waves[i], (1, 80000)), 16000)
-    print("Running test_set_whisper with noisy audio")
-    noisy_wer = test_set_whisper(whisper_model, noisy_waves, test_transcripts)
-    print(f"WHISPER {whisper_level} MODEL NOISY MEAN_WER: {noisy_wer}")
-    print(f"WHISPER {whisper_level} MODEL WER DEPROVEMENT WITH NOISE: {noisy_wer - unperturbed_wer}")
 
 
 def request_transcript(headers: dict, data: dict) -> str:
@@ -295,6 +297,5 @@ def test_speechmatics(perturbation_model: pt.nn.Module):
 
 
 if __name__ == "__main__":
-    # model = grab_perturbation_model("wavperturbation_model.pt")
-    # test_whisper(model)
-    test_noisy_whisper()
+    model = grab_perturbation_model("wavperturbation_model.pt")
+    test_whisper(model, noisy=True)
