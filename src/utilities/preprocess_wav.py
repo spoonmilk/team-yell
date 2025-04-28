@@ -26,6 +26,8 @@ MAX_LEN_S = 5  # seconds
 MAX_LEN = TARGET_SR * MAX_LEN_S
 PREEMPHASIS = 0.97
 
+# Test to training ratio
+TEST_PORTION = 0.1
 
 class Locked:
     def __init__(self, inner: Any):
@@ -76,6 +78,18 @@ def find_transcription(flac_path: str) -> str:
                 return line.split(maxsplit=1)[1].strip()
     raise RuntimeError(f"No transcription for {base} in {trans_file}")
 
+def clip_wave(wav: torch.Tensor) -> torch.Tensor:
+    L = wav.size(1)
+    if L < MAX_LEN:
+        wav = F.pad(wav, (0, MAX_LEN - L))
+    else:
+        wav = wav[:, :MAX_LEN]
+    return wav
+
+def pad_to_max(wavs: list[torch.Tensor]) -> torch.Tensor:
+    max_len = max(map(lambda tens: tens.shape[-1], wavs))
+    padded_wavs = list(map(lambda tens: torch.cat((tens.squeeze(0), torch.zeros((max_len - tens.shape[1],))), dim=0), wavs))
+    return torch.stack(padded_wavs, dim=0)
 
 def preprocess_wave(wav: torch.Tensor, sr: int) -> torch.Tensor:
     """
@@ -98,11 +112,12 @@ def preprocess_wave(wav: torch.Tensor, sr: int) -> torch.Tensor:
     # Pre-emphasis
     wav = torch.cat([wav[:, :1], wav[:, 1:] - PREEMPHASIS * wav[:, :-1]], dim=1)
     # Pad/trim
-    L = wav.size(1)
-    if L < MAX_LEN:
-        wav = F.pad(wav, (0, MAX_LEN - L))
-    else:
-        wav = wav[:, :MAX_LEN]
+    # if clip:
+    #     L = wav.size(1)
+    #     if L < MAX_LEN:
+    #         wav = F.pad(wav, (0, MAX_LEN - L))
+    #     else:
+    #         wav = wav[:, :MAX_LEN]
     # Normalize to [-1,1]
     max_val = wav.abs().max().clamp(min=1e-4)
     wav = wav / max_val
@@ -158,16 +173,37 @@ def grab_waveforms(num_files: int) -> Tuple[torch.Tensor, list[str]]:
 
     waves = wave_list.inner  # list of (1, MAX_LEN)
     trans = trans_list.inner  # list of token lists
+    waves = list(map(clip_wave, waves))
     batch = torch.stack(waves, dim=0)  # (B, 1, MAX_LEN)
     return batch, trans
+
+def grab_all_waveforms() -> Tuple[torch.Tensor, list[str]]:
+    paths = list(flacfiles(AUDIO_DIR))
+    audio_paths = Locked(paths.copy())
+    wave_list = Locked([])
+    trans_list = Locked([])
+
+    with ThreadPoolExecutor(max_workers=NUM_WORKERS) as executor:
+        for _ in range(2703): #2703 is the number of files in the Librispeech
+            executor.submit(extract_data, audio_paths, wave_list, trans_list)
+        executor.shutdown(wait=True)
+
+    waves = wave_list.inner  # list of (1, MAX_LEN)
+    trans = trans_list.inner  # list of token lists
+    break_idx = int(len(waves)*(1-TEST_PORTION))
+    train_waves = torch.stack(list(map(clip_wave, waves[break_idx:])), dim=0)
+    test_waves = pad_to_max(waves[:break_idx])
+    train_trans = trans[break_idx:]
+    test_trans = trans[:break_idx]
+    return (train_waves, train_trans, test_waves, test_trans)
 
 # Demo
 if __name__ == "__main__":
     # batch, transcripts = grab_waveforms(8)
     # print("Batch shape:", batch.shape)  # e.g., (8, 1, 80000)
     # print("First transcript:", transcripts[0])
-    waves, trans = grab_waveforms(2703)
-    save_data(waves, trans)
+    train_waves, train_trans, test_waves, test_trans = grab_all_waveforms()
+    save_data(train_waves, train_trans, test_waves, test_trans)
 
 
 

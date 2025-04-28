@@ -15,19 +15,19 @@ except NameError:
 
 os.makedirs(DATA_DIR, exist_ok=True)
 
-def save_data(waves: torch.Tensor, transcripts: list[str]):
-    test_num = int(TEST_PORTION*waves.shape[0])
-    indices = random.sample(range(len(transcripts)), test_num)
+def save_data(train_waves: torch.Tensor, train_trans: list[str], test_waves: torch.Tensor, test_trans: list[str]):
+    # test_num = int(TEST_PORTION*waves.shape[0])
+    # indices = random.sample(range(len(transcripts)), test_num)
     #Separate waves and save them
-    waves = np.squeeze(waves.numpy())
-    test_waves = torch.tensor(np.take(waves, indices, axis=0))
-    train_waves = torch.tensor(np.delete(waves, indices, axis=0))
+    # waves = np.squeeze(waves.numpy())
+    # test_waves = torch.tensor(np.take(waves, indices, axis=0))
+    # train_waves = torch.tensor(np.delete(waves, indices, axis=0))
     torch.save(test_waves, DATA_DIR + 'test_waves.pt')
     torch.save(train_waves, DATA_DIR + 'train_waves.pt')
     #Separate transcripts
-    transcripts = np.array(transcripts)
-    test_trans = list(np.take(transcripts, indices))
-    train_trans = list(np.delete(transcripts, indices))
+    # transcripts = np.array(transcripts)
+    # test_trans = list(np.take(transcripts, indices))
+    # train_trans = list(np.delete(transcripts, indices))
     with open(DATA_DIR + 'test_transcripts.pkl', 'wb') as fl:
         pickle.dump(test_trans, fl)
     with open(DATA_DIR + 'train_transcripts.pkl', 'wb') as fl:
