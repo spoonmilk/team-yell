@@ -34,7 +34,7 @@ NOISE_MEAN = 0
 NOISE_STD_DEV_RNG_PORTION = 0.05
 MODEL_TYPE = "tiny"
 NUM_WORKERS = 5
-NUM_EPOCHS = 10
+NUM_EPOCHS = 50
 PERFORMANCE_CUTOFF = 0.1
 SCALE_FACTOR = 0.5
 
@@ -147,6 +147,9 @@ def compute_logit_reward(
         adversarial_bonus (float): The weight for the logit entropy reward.
         distortion_penalty (float): The weight for the distortion penalty.
         hf_incentive (float): The weight for the high frequency incentive.
+
+    Returns:
+        tuple: (reward_value, metrics_dict) where metrics_dict contains all computed metrics
     """
     entropy = logit_entropy(logits)
     # Take mean squared change between clean and perturbed audio
@@ -167,11 +170,23 @@ def compute_logit_reward(
     high_eng = mag[:, cutoff_idx:].mean()
     hf_ratio = (high_eng + 1e-8) / (low_eng + 1e-8)
 
-    return (
-        adversarial_bonus * entropy
-        - distortion_penalty * delta
-        + hf_incentive * hf_ratio
-    )
+    # Calculate discounted delta and hf bonus
+    discounted_delta = delta * distortion_penalty
+    hf_bonus = hf_ratio * hf_incentive
+
+    # Calculate final reward
+    reward = adversarial_bonus * entropy - discounted_delta + hf_bonus
+
+    # Return both the reward and a dictionary of metrics
+    metrics = {
+        "entropy": entropy.item(),
+        "delta": delta.item(),
+        "discounted_delta": discounted_delta.item(),
+        "hf_ratio": hf_ratio.item(),
+        "hf_bonus": hf_bonus.item(),
+    }
+
+    return reward, metrics
 
 
 # CHECKED - NOTE: very heavily penalizes missed words (all words afterwards are considered incorrect)
@@ -315,13 +330,32 @@ def epoch(
         )
     elif train_type == "logit":
         logits = [extract_logits(x) for x in perturbed_list]
-        scores = pt.tensor(
-            [
-                compute_logit_reward(clean_audio_batch, perturbed_list[i], logits[i])
-                for i in range(len(perturbed_list))
-            ],
-            device=device,
-        )
+
+        # Updated to collect rewards and metrics
+        rewards_and_metrics = [
+            compute_logit_reward(clean_audio_batch, perturbed_list[i], logits[i])
+            for i in range(len(perturbed_list))
+        ]
+
+        # Unpack rewards and metrics
+        scores = pt.tensor([r[0] for r in rewards_and_metrics], device=device)
+        all_metrics = [m[1] for m in rewards_and_metrics]
+
+        # Calculate mean metrics
+        mean_metrics = {
+            k: sum(metric[k] for metric in all_metrics) / len(all_metrics)
+            for k in all_metrics[0]
+        }
+
+        # Print mean metrics for the epoch
+        print(f"\n--- Epoch {epoch} Mean Metrics ---")
+        print(f"Mean Entropy: {mean_metrics['entropy']:.4f}")
+        print(f"Mean Delta: {mean_metrics['delta']:.4f}")
+        print(f"Mean Discounted Delta: {mean_metrics['discounted_delta']:.4f}")
+        print(f"Mean HF Ratio: {mean_metrics['hf_ratio']:.4f}")
+        print(f"Mean HF Bonus: {mean_metrics['hf_bonus']:.4f}")
+        print("---------------------------\n")
+
         print(
             f"Scores  →  min={scores.min().item():.4f}, "
             f"max={scores.max().item():.4f}, "
@@ -335,11 +369,6 @@ def epoch(
     weights = scores_to_weights(scores)
     # Update model weights
     update_model_weights(model, population, weights)
-
-    if train_type == "logit":
-        print(f"Mean entropy: {scores.mean().cpu()}")
-    else:
-        print(f"Avg WER: {scores.mean().cpu()}")
 
     return float(scores.mean().cpu())
 
