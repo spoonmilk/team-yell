@@ -36,7 +36,7 @@ NOISE_MEAN = 0
 NOISE_STD_DEV_RNG_PORTION = 0.05
 MODEL_TYPE = "tiny"
 NUM_WORKERS = 5
-NUM_EPOCHS = 20
+NUM_EPOCHS = 10
 PERFORMANCE_CUTOFF = 0.1
 SCALE_FACTOR = 0.5
 
@@ -152,10 +152,24 @@ def scheduled_rewards(epoch: int, total_epochs: int) -> tuple[float, float, floa
     The rewards are scaled by the mutation strength, which decreases over time.
     """
     t = epoch / total_epochs
-    adversarial_bonus = 1.0 * (1 - t) + 0.1 * t
-    distortion_penalty = 0.1 * (1 - t) + 1.0 * t
+    adversarial_bonus = max((2.0 * (1 - t) + 0.1 * t), 1.0)
+    distortion_penalty = min((0.1 * (1 - t) + 1.2 * t), 1.0)
     interpretability_incentive = 0.1 * (1 - t) + 1.0 * t
     return adversarial_bonus, distortion_penalty, interpretability_incentive
+
+
+def phase_deviation(
+    clean: pt.Tensor, pert: pt.Tensor, n_fft=512, hop_length=128
+) -> pt.Tensor:
+    """
+    Returns a scalar: the mean |sin((delta)phase)| across time–frequency bins.
+    """
+    # shape: (batch, time) → (batch, freq, frames)
+    clean_spec = pt.stft(clean, n_fft=n_fft, hop_length=hop_length, return_complex=True)
+    pert_spec = pt.stft(pert, n_fft=n_fft, hop_length=hop_length, return_complex=True)
+    # extract angles
+    phase_diff = pt.angle(pert_spec) - pt.angle(clean_spec)
+    return pt.abs(pt.sin(phase_diff)).mean()
 
 
 def compute_logit_reward(
@@ -183,6 +197,9 @@ def compute_logit_reward(
     pert_mel = mel_spec(perturbed_audio)  # (1, F, N)
     mel_mse = ((pert_mel - clean_mel) ** 2).mean()
 
+    # Compute phase deviation
+    phase_dev = phase_deviation(clean_audio, perturbed_audio)
+
     clean_np = clean_audio.squeeze().cpu().numpy()
     pert_np = perturbed_audio.squeeze().cpu().numpy()
 
@@ -195,10 +212,24 @@ def compute_logit_reward(
     # Normalize s to within similar bounds as the other rewards
     s = (s - 0.3) / (1.0 - 0.3)  # Normalize to [0, 1]
 
+    # Normalize mse to within [0, 1]
+    mel_mse = min((mel_mse) / (50.0), 1.0)  # Normalize to [0, 1]
     adversarial_bonus, distortion_penalty, interpretability_incentive = sched_rewards
+
+    print(
+        f"Entropy: {entropy:.4f}, "
+        f"Mel MSE: {mel_mse:.4f}, "
+        f"STOI: {s:.4f}, "
+        f"Phase deviation: {phase_dev:.4f}, "
+        f"Adversarial bonus: {adversarial_bonus:.4f}, "
+        f"Distortion penalty: {distortion_penalty:.4f}, "
+        f"Interpretability incentive: {interpretability_incentive:.4f}\n"
+    )
+
     return (
         adversarial_bonus * entropy
         - distortion_penalty * mel_mse
+        + phase_dev
         + interpretability_incentive * s
     )
 
@@ -285,7 +316,7 @@ def scores_to_weights(
     return pt.softmax(filtered / scale_factor, dim=0)
 
 
-def mutation_strength(epoch, total_epochs, sig_o=0.5, sig_t=0.01):
+def mutation_strength(epoch, total_epochs, sig_o=1.0, sig_t=0.01):
     """
     Returns the mutation strength for the current epoch
 
@@ -372,7 +403,7 @@ def epoch(
     update_model_weights(model, population, weights)
 
     if train_type == "logit":
-        print(f"Mean entropy: {scores.mean().cpu()}")
+        print(f"Mean score: {scores.mean().cpu()}")
     else:
         print(f"Avg WER: {scores.mean().cpu()}")
 
