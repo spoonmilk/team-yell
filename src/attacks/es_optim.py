@@ -44,7 +44,7 @@ SCALE_FACTOR = 0.5
 NUM_LAYERS = 3
 NUM_CHANNELS = 32
 KERNEL_SIZE = 3
-MAX_DELTA = 0.04
+MAX_DELTA = 0.05
 
 try:
     BASE_DIR = Path(__file__).resolve().parent
@@ -316,7 +316,7 @@ def scores_to_weights(
     return pt.softmax(filtered / scale_factor, dim=0)
 
 
-def mutation_strength(epoch, total_epochs, sig_o=1.0, sig_t=0.01):
+def mutation_strength(epoch, total_epochs, sig_o=0.5, sig_t=0.01):
     """
     Returns the mutation strength for the current epoch
 

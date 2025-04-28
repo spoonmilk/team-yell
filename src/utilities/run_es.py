@@ -25,7 +25,7 @@ model = torch.load(MODEL_PATH, weights_only=False)
 model.eval()
 
 waveform, sample_rate = torchaudio.load(
-    f"{HOME_PATH}/src/LibriSpeech/dev-clean/1988/24833/1988-24833-0000.flac"
+    f"{HOME_PATH}/src/LibriSpeech/dev-clean/251/136532/251-136532-0002.flac"
 )
 
 with torch.no_grad():
@@ -51,6 +51,3 @@ if mel.ndim == 3:
 opts = whisper.DecodingOptions()
 result = whisper.decode(whisper_model, mel, opts)
 print(result.text)
-
-wer = wer("The two stray kittens gradually make themselves at home", result.text)
-print("WER:", wer)
