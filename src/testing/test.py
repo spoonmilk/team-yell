@@ -6,6 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 from tqdm import tqdm
 from collections.abc import Callable
 from typing import Any
+from audiomentations import AddGaussianNoise
 from pathlib import Path
 import os
 import requests
@@ -61,16 +62,21 @@ def test_audio_set(audio: pt.Tensor, transcripts: list[str], test_func: Callable
     mean_wer = np.mean(wers)
     return mean_wer
 
-def try_until(task: Callable[[Any], Any], args: tuple, err_msg: str) -> Any: #Typing left somewhat ambiguous because task return type is so variable
+
+# Typing left somewhat ambiguous because task return type is so variable
+def try_until(task: Callable[[Any], Any], args: tuple, err_msg: str) -> Any:
     while True:
-        try: task_result = task(*args)
+        try:
+            task_result = task(*args)
         except Exception as e:
             print(err_msg + ":", e)
             time.sleep(1)
-        else: break
+        else:
+            break
     return task_result
 
 # ASSEMBLY AI TEST FUNCTIONS
+
 
 def curried_test_one_aai(config: aai.TranscriptionConfig) -> Callable[[pt.Tensor, str], float]:
     def test_one_aai(wave: pt.Tensor, trans: str) -> float:
@@ -85,6 +91,7 @@ def curried_test_one_aai(config: aai.TranscriptionConfig) -> Callable[[pt.Tensor
         test_wer = wer(trans, aai_transcript.text)
         return test_wer
     return test_one_aai
+
 
 def test_aai(perturbation_model: pt.nn.Module, aai_level: str = "nano"):
     # Set API key
@@ -110,22 +117,25 @@ def test_aai(perturbation_model: pt.nn.Module, aai_level: str = "nano"):
 
 # WHISPER TEST FUNCTIONS
 
-def whisper_transcribe(w_model: whisper.Whisper, audio: pt.Tensor) -> list[str]: 
+
+def whisper_transcribe(w_model: whisper.Whisper, audio: pt.Tensor) -> list[str]:
     audio = whisper.pad_or_trim(audio)
     mel = whisper.log_mel_spectrogram(audio).to(w_model.device)
     opts = whisper.DecodingOptions(fp16=False)
     results = whisper.decode(w_model, mel, opts)
     return [result.text for result in results]
 
+
 def test_set_whisper(w_model: whisper.Whisper, audio: pt.Tensor, transcripts: list[str]) -> float:
     whisper_transcripts = whisper_transcribe(w_model, audio)
     wers = np.array(list(map(lambda w_trans, trans: wer(trans, w_trans), whisper_transcripts, transcripts)))
     return np.mean(wers)
 
+
 def test_whisper(perturbation_model: pt.nn.Module, whisper_level: str = "tiny"):
     print("Loading model at level:", whisper_level)
     whisper_model = whisper.load_model(whisper_level)
-    print("Mode loaded, running test_set_whisper with the test data")
+    print("Model loaded, running test_set_whisper with the test data")
     unperturbed_wer = test_set_whisper(whisper_model, test_waves, test_transcripts)
     print(f"WHISPER {whisper_level} MODEL UNPERTURBED MEAN_WER: {unperturbed_wer}")
     print("Running perturbation model to generate perturbed audio of the test_waves")
@@ -133,10 +143,35 @@ def test_whisper(perturbation_model: pt.nn.Module, whisper_level: str = "tiny"):
         perturbed_waves = perturbation_model(test_waves)
     print("Running test_set_whisper with perturbed audio")
     perturbed_wer = test_set_whisper(whisper_model, perturbed_waves, test_transcripts)
+    for i in range(len(perturbed_waves)):
+        torchaudio.save(f"perturbed wav {i}.wav", pt.reshape(perturbed_waves[i], (1, 80000)), 16000)
+        torchaudio.save(f"clean wav {i}.wav", pt.reshape(test_waves[i], (1, 80000)), 16000)
     print(f"WHISPER {whisper_level} MODEL PERTURBED MEAN_WER: {perturbed_wer}")
     print(f"WHISPER {whisper_level} MODEL WER DEPROVEMENT WITH PERTURBATION: {perturbed_wer - unperturbed_wer}")
 
-#GLADIA TEST FUNCTIONS
+
+def test_noisy_whisper(whisper_level: str = "tiny"):
+    print("test waves shape", test_waves.shape)
+    print("Loading model at level:", whisper_level)
+    whisper_model = whisper.load_model(whisper_level)
+    print("Model loaded, running test_set_whisper with the test data")
+    unperturbed_wer = test_set_whisper(whisper_model, test_waves, test_transcripts)
+    print(f"WHISPER {whisper_level} MODEL UNPERTURBED MEAN_WER: {unperturbed_wer}")
+    print("Generating noisy test_waves")
+    transform = AddGaussianNoise(
+        min_amplitude=0.03,
+        max_amplitude=0.045,
+        p=1.0
+    )
+    noisy_waves = transform(test_waves, 16000)
+    for i in range(len(noisy_waves)):
+        torchaudio.save(f"noisy wav {i}.wav", pt.reshape(noisy_waves[i], (1, 80000)), 16000)
+        torchaudio.save(f"clean wav {i}.wav", pt.reshape(test_waves[i], (1, 80000)), 16000)
+    print("Running test_set_whisper with noisy audio")
+    noisy_wer = test_set_whisper(whisper_model, noisy_waves, test_transcripts)
+    print(f"WHISPER {whisper_level} MODEL NOISY MEAN_WER: {noisy_wer}")
+    print(f"WHISPER {whisper_level} MODEL WER DEPROVEMENT WITH NOISE: {noisy_wer - unperturbed_wer}")
+
 
 def request_transcript(headers: dict, data: dict) -> str:
     trans_req_resp = requests.post("https://api.gladia.io/v2/pre-recorded/", headers=headers, json=data).json()
@@ -155,34 +190,39 @@ def request_transcript(headers: dict, data: dict) -> str:
                 time.sleep(0.1)
     return g_response['transcription']['full_transcript']
 
+
 def upload_file(headers: dict, files: list) -> str:
     upload_resp = requests.post("https://api.gladia.io/v2/upload/", headers=headers, files=files).json()
     audio_url = upload_resp.get("audio_url")
     return audio_url
 
-def test_one_gladia(wave: pt.Tensor, trans: str) -> float: #CREDIT: This function (and request_transcript + upload_file) takes from the Gladia sample python API call documentation
-    #Get wave as bytes
+
+# CREDIT: This function (and request_transcript + upload_file) takes from the Gladia sample python API call documentation
+def test_one_gladia(wave: pt.Tensor, trans: str) -> float:
+    # Get wave as bytes
     dimmed_wave = wave.unsqueeze(0)
     bytes_obj = io.BytesIO()
     torchaudio.save(bytes_obj, dimmed_wave, 16000, format='flac')
     file_content = bytes_obj.getvalue()
-    #Upload wave (as a file) to gladia
+    # Upload wave (as a file) to gladia
     headers = {
         "x-gladia-key": GLADIA_API_KEY,
         "accept": "application/json",
     }
-    file_path = "dummy/path/"; file_extension = ".flac"
-    files = [ #I wonder if you could upload multiple files at once... would be awfully nice, but given that only one URL is returned, I think not
+    file_path = "dummy/path/"
+    file_extension = ".flac"
+    files = [  # I wonder if you could upload multiple files at once... would be awfully nice, but given that only one URL is returned, I think not
         ("audio", (file_path, file_content, "audio/" + file_extension[1:])),
     ]
     audio_url = try_until(upload_file, (headers, files), "Error while attempting to upload audio clip")
-    #Request transcription
+    # Request transcription
     headers["Content-Type"] = "application/json"
-    data = { "audio_url": audio_url }
+    data = {"audio_url": audio_url}
     g_trans = try_until(request_transcript, (headers, data), "Error while attempting to request transcript")
-    #Run wer and return
+    # Run wer and return
     test_wer = wer(trans, g_trans)
     return test_wer
+
 
 def test_gladia(perturbation_model: pt.nn.Module):
     unperturbed_wer = test_audio_set(test_waves, test_transcripts, test_one_gladia)
@@ -195,8 +235,9 @@ def test_gladia(perturbation_model: pt.nn.Module):
 
 # SPEECHMATICS TEST FUNCTIONS
 
+
 def speechmatics_transcribe(client: BatchClient, file_path: str, conf: dict) -> str:
-    try: #CREDIT: Only slightly modified from the speechmatics API documentation
+    try:  # CREDIT: Only slightly modified from the speechmatics API documentation
         job_id = client.submit_job(audio=file_path, transcription_config=conf)
         s_transcript = client.wait_for_completion(job_id, transcription_format='txt')
     except HTTPStatusError as e:
@@ -208,10 +249,12 @@ def speechmatics_transcribe(client: BatchClient, file_path: str, conf: dict) -> 
             raise e
     return s_transcript
 
+
 def curried_test_one_speechmatics(settings: ConnectionSettings, conf: dict) -> float:
     os.makedirs(TEMP_DIR, exist_ok=True)
+
     def test_one_speechmatics(wave: pt.Tensor, trans: str) -> float:
-        #Turn audio sample into file (b/c that's the way the API expects it, as relatively inefficient as it is)
+        # Turn audio sample into file (b/c that's the way the API expects it, as relatively inefficient as it is)
         dimmed_wave = wave.unsqueeze(0)
         split_trans = trans.split()
         word_num = min(len(split_trans), 4)
@@ -219,14 +262,16 @@ def curried_test_one_speechmatics(settings: ConnectionSettings, conf: dict) -> f
         file_path = TEMP_DIR + file_name
         with open(file_path, "wb") as fl:
             torchaudio.save(fl, dimmed_wave, 16000, format='flac')
-        #Send audio file over API and grab transcript
+        # Send audio file over API and grab transcript
         with BatchClient(settings) as client:
-            s_transcript = try_until(speechmatics_transcribe, (client, file_path, conf), "Error having speechmatics transcribe file")
-        #Get wer of transcripts
+            s_transcript = try_until(speechmatics_transcribe, (client, file_path, conf),
+                                     "Error having speechmatics transcribe file")
+        # Get wer of transcripts
         os.remove(file_path)
         test_wer = wer(trans, s_transcript)
         return test_wer
     return test_one_speechmatics
+
 
 def test_speechmatics(perturbation_model: pt.nn.Module):
     settings = ConnectionSettings(
@@ -250,9 +295,6 @@ def test_speechmatics(perturbation_model: pt.nn.Module):
 
 
 if __name__ == "__main__":
-    model = grab_perturbation_model("wavperturbation_model.pt")
-    test_aai(model)
-
-#LIST OF THINGS TO DO:
-# - Modularize the test_* functions - TRIAGED OUT
-# - Change the saved tensors to be full length - DONE
+    # model = grab_perturbation_model("wavperturbation_model.pt")
+    # test_whisper(model)
+    test_noisy_whisper()
