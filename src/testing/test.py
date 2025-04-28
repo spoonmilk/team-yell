@@ -30,9 +30,9 @@ except NameError:
     CHECKPOINTS_DIR = os.path.abspath("../attacks/checkpoints") + "/"
     TEMP_DIR = os.path.abspath("../temp") + "/"
 
-AAI_API_KEY = "82d2691ae7d340c895678ab5c284e616"
-GLADIA_API_KEY = "44a5db2a-f937-45ab-9211-18f063870ef6"
-SPEECHMATICS_API_KEY = "gF8yNtvnU3ovRr6XIXoaLhWibuwHrr70"
+AAI_API_KEY = ""
+GLADIA_API_KEY = ""
+SPEECHMATICS_API_KEY = ""
 
 test_waves, test_transcripts = load_data(test=True)
 test_waves = test_waves[:10]
