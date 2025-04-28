@@ -36,7 +36,7 @@ NOISE_MEAN = 0
 NOISE_STD_DEV_RNG_PORTION = 0.05
 MODEL_TYPE = "tiny"
 NUM_WORKERS = 5
-NUM_EPOCHS = 10
+NUM_EPOCHS = 20
 PERFORMANCE_CUTOFF = 0.1
 SCALE_FACTOR = 0.5
 
@@ -152,7 +152,7 @@ def compute_logit_reward(
     logits: pt.Tensor,
     adversarial_bonus: float = 1.0,
     distortion_penalty: float = 0.5,
-    hf_incentive: float = 0.5,
+    interpretability_incentive: float = 0.5,
 ):
     """
     Computes a multi-factor reward for the perturbed audio.
@@ -165,13 +165,13 @@ def compute_logit_reward(
         logits (pt.Tensor): The logits from the Whisper model.
         adversarial_bonus (float): The weight for the logit entropy reward.
         distortion_penalty (float): The weight for the distortion penalty.
-        hf_incentive (float): The weight for the high frequency incentive.
+        interpretability_incentive (float): The weight for the high frequency incentive.
     """
     entropy = logit_entropy(logits)
     # Take mean squared change between clean and perturbed audio
     clean_mel = mel_spec(clean_audio)  # (1, F, N)
     pert_mel = mel_spec(perturbed_audio)  # (1, F, N)
-    mel_mse = (mel_weights * (pert_mel - clean_mel) ** 2).mean()
+    mel_mse = ((pert_mel - clean_mel) ** 2).mean()
 
     clean_np = clean_audio.squeeze().cpu().numpy()
     pert_np = perturbed_audio.squeeze().cpu().numpy()
@@ -185,7 +185,11 @@ def compute_logit_reward(
     # Normalize s to within similar bounds as the other rewards
     s = (s - 0.3) / (1.0 - 0.3)  # Normalize to [0, 1]
 
-    return adversarial_bonus * entropy - distortion_penalty * mel_mse + hf_incentive * s
+    return (
+        adversarial_bonus * entropy
+        - distortion_penalty * mel_mse
+        + interpretability_incentive * s
+    )
 
 
 # CHECKED - NOTE: very heavily penalizes missed words (all words afterwards are considered incorrect)
