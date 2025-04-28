@@ -5,6 +5,7 @@ import io
 from concurrent.futures import ThreadPoolExecutor
 from tqdm import tqdm
 from collections.abc import Callable
+from audiomentations import AddGaussianNoise
 from pathlib import Path
 import os
 
@@ -116,7 +117,7 @@ def test_set_whisper(w_model: whisper.Whisper, audio: pt.Tensor, transcripts: li
 def test_whisper(perturbation_model: pt.nn.Module, whisper_level: str = "tiny"):
     print("Loading model at level:", whisper_level)
     whisper_model = whisper.load_model(whisper_level)
-    print("Mode loaded, running test_set_whisper with the test data")
+    print("Model loaded, running test_set_whisper with the test data")
     unperturbed_wer = test_set_whisper(whisper_model, test_waves, test_transcripts)
     print(f"WHISPER {whisper_level} MODEL UNPERTURBED MEAN_WER: {unperturbed_wer}")
     print("Running perturbation model to generate perturbed audio of the test_waves")
@@ -124,8 +125,32 @@ def test_whisper(perturbation_model: pt.nn.Module, whisper_level: str = "tiny"):
         perturbed_waves = perturbation_model(test_waves)
     print("Running test_set_whisper with perturbed audio")
     perturbed_wer = test_set_whisper(whisper_model, perturbed_waves, test_transcripts)
+    torchaudio.save("perturbed wav 0.wav", pt.reshape(perturbed_waves[0], (1, 80000)), 16000)
+    torchaudio.save("clean wav 0.wav", pt.reshape(test_waves[0], (1, 80000)), 16000)
     print(f"WHISPER {whisper_level} MODEL PERTURBED MEAN_WER: {perturbed_wer}")
     print(f"WHISPER {whisper_level} MODEL WER DEPROVEMENT WITH PERTURBATION: {perturbed_wer - unperturbed_wer}")
+
+
+def test_noisy_whisper(whisper_level: str = "tiny"):
+    print("test waves shape", test_waves.shape)
+    print("Loading model at level:", whisper_level)
+    whisper_model = whisper.load_model(whisper_level)
+    print("Model loaded, running test_set_whisper with the test data")
+    unperturbed_wer = test_set_whisper(whisper_model, test_waves, test_transcripts)
+    print(f"WHISPER {whisper_level} MODEL UNPERTURBED MEAN_WER: {unperturbed_wer}")
+    print("Generating noisy test_waves")
+    transform = AddGaussianNoise(
+        min_amplitude=0.03,
+        max_amplitude=0.045,
+        p=1.0
+    )
+    noisy_waves = transform(test_waves, 16000)
+    torchaudio.save("noisy wav 0.wav", pt.reshape(noisy_waves[0], (1, 80000)), 16000)
+    torchaudio.save("clean wav 0.wav", pt.reshape(test_waves[0], (1, 80000)), 16000)
+    print("Running test_set_whisper with noisy audio")
+    noisy_wer = test_set_whisper(whisper_model, noisy_waves, test_transcripts)
+    print(f"WHISPER {whisper_level} MODEL NOISY MEAN_WER: {noisy_wer}")
+    print(f"WHISPER {whisper_level} MODEL WER DEPROVEMENT WITH NOISE: {noisy_wer - unperturbed_wer}")
 
 
 def test_one_gladia(wave: pt.Tensor, trans: str) -> float:
@@ -135,3 +160,4 @@ def test_one_gladia(wave: pt.Tensor, trans: str) -> float:
 if __name__ == "__main__":
     model = grab_perturbation_model("wavperturbation_model.pt")
     test_whisper(model)
+    # test_noisy_whisper()
