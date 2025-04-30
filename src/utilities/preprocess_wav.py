@@ -177,7 +177,7 @@ def grab_waveforms(num_files: int) -> Tuple[torch.Tensor, list[str]]:
     batch = torch.stack(waves, dim=0)  # (B, 1, MAX_LEN)
     return batch, trans
 
-def grab_all_waveforms() -> Tuple[torch.Tensor, list[str]]:
+def grab_all_waveforms() -> Tuple[torch.Tensor, list[str], torch.Tensor, list[str]]:
     paths = list(flacfiles(AUDIO_DIR))
     audio_paths = Locked(paths.copy())
     wave_list = Locked([])
@@ -188,13 +188,13 @@ def grab_all_waveforms() -> Tuple[torch.Tensor, list[str]]:
             executor.submit(extract_data, audio_paths, wave_list, trans_list)
         executor.shutdown(wait=True)
 
-    waves = wave_list.inner  # list of (1, MAX_LEN)
+    waves = wave_list.inner # list of (1, MAX_LEN)
     trans = trans_list.inner  # list of token lists
     break_idx = int(len(waves)*(1-TEST_PORTION))
-    train_waves = torch.stack(list(map(clip_wave, waves[break_idx:])), dim=0)
-    test_waves = pad_to_max(waves[:break_idx])
-    train_trans = trans[break_idx:]
-    test_trans = trans[:break_idx]
+    train_waves = torch.squeeze(torch.stack(list(map(clip_wave, waves[:break_idx])), dim=0))
+    test_waves = torch.squeeze(pad_to_max(waves[break_idx:]))
+    train_trans = trans[:break_idx]
+    test_trans = trans[break_idx:]
     return (train_waves, train_trans, test_waves, test_trans)
 
 # Demo

@@ -37,9 +37,13 @@ GLADIA_API_KEY = ""
 SPEECHMATICS_API_KEY = ""
 
 test_waves, test_transcripts = load_data(test=True)
-test_waves = test_waves[:10]
-test_transcripts = test_transcripts[:10]
-transform = AddGaussianNoise(min_amplitude=0.03, max_amplitude=0.045, p=1.0)
+test_waves = test_waves[:50]
+test_transcripts = test_transcripts[:50]
+transform = AddGaussianNoise(
+    min_amplitude=0.03,
+    max_amplitude=0.045,
+    p=1.0
+)
 noisy_waves = transform(test_waves, 16000)
 
 # GENERAL FUNCTIONS
@@ -107,7 +111,7 @@ def curried_test_one_aai(
     return test_one_aai
 
 
-def test_aai(perturbation_model: pt.nn.Module, aai_level: str = "nano"):
+def test_aai(perturbation_model: pt.nn.Module, aai_level: str = "best"):
     # Set API key
     aai.settings.api_key = AAI_API_KEY
     # Grab appropriate model config
@@ -164,6 +168,7 @@ def test_whisper(
 ):
     print("Loading model at level:", whisper_level)
     whisper_model = whisper.load_model(whisper_level)
+    whisper_model.device = "cpu"
     print("Model loaded, running test_set_whisper with the test data")
     unperturbed_wer = test_set_whisper(whisper_model, test_waves, test_transcripts)
     print(f"WHISPER {whisper_level} MODEL UNPERTURBED MEAN_WER: {unperturbed_wer}")

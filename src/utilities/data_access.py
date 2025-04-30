@@ -56,4 +56,4 @@ if Path(DATA_DIR + 'test_transcripts.pkl').is_file() and Path(DATA_DIR + 'train_
     # def batches(batch_sz: int, num_batches: int = None):
     #     assert num_batches*batch_sz <= len(transcripts) #Must be enough possible batches in the first place
     #     indices = np.arange(len(transcripts))
-    #     while (len(indices) >= batch_sz) or 
+    #     while (len(indices) >= batch_sz) or
