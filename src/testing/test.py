@@ -376,4 +376,4 @@ if __name__ == "__main__":
     model = grab_perturbation_model("wavperturbation_model.pt")
     print("Testing Whisper with perturbation model")
     test_whisper(model, noisy=False, whisper_level="tiny")
-    test_whisper(model, noisy=False, whisper_level="medium")
+    test_whisper(model, noisy=True, whisper_level="tiny")

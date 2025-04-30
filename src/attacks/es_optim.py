@@ -151,10 +151,17 @@ def compute_logit_reward(
     Returns:
         tuple: (reward_value, metrics_dict) where metrics_dict contains all computed metrics
     """
+
+    # COMPONENT 1: Logit entropy
     entropy = logit_entropy(logits)
-    # Take mean squared change between clean and perturbed audio
+
+    # COMPONENT 2: Distortion penalty
+    # Calculate the mean squared error between the clean and perturbed audio
     delta = pt.mean(pt.square(perturbed_audio - clean_audio))
 
+    # COMPONENT 3: High frequency incentive
+    # Calculate the STFT of the perturbed audio
+    # We use the STFT to get the magnitude of the audio signal
     spec = pt.stft(
         perturbed_audio.squeeze(1), n_fft=256, hop_length=128, return_complex=True
     )
