@@ -34,7 +34,7 @@ NOISE_MEAN = 0
 NOISE_STD_DEV_RNG_PORTION = 0.05
 MODEL_TYPE = "tiny"
 NUM_WORKERS = 5
-NUM_EPOCHS = 50
+NUM_EPOCHS = 1
 PERFORMANCE_CUTOFF = 0.1
 SCALE_FACTOR = 0.5
 
@@ -157,7 +157,6 @@ def compute_logit_reward(
     adversarial_reward = entropy * adversarial_bonus
 
     # COMPONENT 2: Distortion penalty
-    # Calculate the mean squared error between the clean and perturbed audio
     delta = pt.mean(pt.square(perturbed_audio - clean_audio))
     discounted_delta = delta * distortion_penalty
 
@@ -175,7 +174,7 @@ def compute_logit_reward(
     kl_reward = kl_divergence * normal_incentive
 
     # Calculate final reward
-    reward = adversarial_reward * entropy - discounted_delta + kl_reward
+    reward = adversarial_reward * entropy - discounted_delta - kl_reward
 
     # Return both the reward and a dictionary of metrics
     metrics = {
