@@ -11,14 +11,14 @@ from pathlib import Path
 import os
 import requests
 import time
+from httpx import HTTPStatusError
+from pystoi import stoi
+from dotenv import load_dotenv
 
 import whisper
 import assemblyai as aai
 from speechmatics.models import ConnectionSettings
 from speechmatics.batch_client import BatchClient
-from httpx import HTTPStatusError
-from pystoi import stoi
-
 
 from ..utilities.data_access import load_data
 from ..utilities.wer import wer
@@ -32,9 +32,11 @@ except NameError:
     CHECKPOINTS_DIR = os.path.abspath("../attacks/checkpoints") + "/"
     TEMP_DIR = os.path.abspath("../temp") + "/"
 
-AAI_API_KEY = ""
-GLADIA_API_KEY = ""
-SPEECHMATICS_API_KEY = ""
+#NEED A 
+if not load_dotenv(): print("WARNING: You are running this script without a .env file with API keys, so you will only be able to run Whisper related test functions.")
+AAI_API_KEY = os.environ.get("AAI_API_KEY")
+GLADIA_API_KEY = os.environ.get("GLADIA_API_KEY")
+SPEECHMATICS_API_KEY = os.environ.get("SPEECHMATICS_API_KEY")
 
 test_waves, test_transcripts = load_data(test=True)
 test_waves = test_waves[:50]
@@ -48,11 +50,9 @@ noisy_waves = transform(test_waves, 16000)
 
 # GENERAL FUNCTIONS
 
-
 def grab_perturbation_model(rel_path: str):
     perturbation_model = pt.load(CHECKPOINTS_DIR + rel_path)
     return perturbation_model
-
 
 def test_audio_set(
     audio: pt.Tensor,
@@ -76,7 +76,6 @@ def test_audio_set(
     mean_wer = np.mean(wers)
     return mean_wer
 
-
 # Typing left somewhat ambiguous because task return type is so variable
 def try_until(task: Callable[[Any], Any], args: tuple, err_msg: str) -> Any:
     while True:
@@ -89,9 +88,7 @@ def try_until(task: Callable[[Any], Any], args: tuple, err_msg: str) -> Any:
             break
     return task_result
 
-
 # ASSEMBLY AI TEST FUNCTIONS
-
 
 def curried_test_one_aai(
     config: aai.TranscriptionConfig,
@@ -380,5 +377,4 @@ def test_speechmatics(perturbation_model: pt.nn.Module):
 if __name__ == "__main__":
     model = grab_perturbation_model("wavperturbation_model.pt")
     print("Testing Whisper with perturbation model")
-    test_whisper(model, noisy=False, whisper_level="tiny")
-    test_whisper(model, noisy=True, whisper_level="tiny")
+    test_aai(model)

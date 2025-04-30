@@ -7,10 +7,14 @@ matplotlib==3.8.0
 tqdm==4.66.0
 jiwer==3.0.1
 cmaes==0.11.1
-audiomentations==0.40.0
 
 # Whisper from GitHub
 git+https://github.com/openai/whisper.git
 # Other speech to text models
 assemblyai==0.40.2
 speechmatics-python==3.0.3
+
+#Other
+audiomentations==0.40.0
+pystoi==0.4.1
+python-dotenv==1.1.0

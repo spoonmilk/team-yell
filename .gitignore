@@ -69,4 +69,5 @@ data/
 train-es.sh
 
 #Api keys
+.env
 api_keys.txt
