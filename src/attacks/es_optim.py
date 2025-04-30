@@ -132,8 +132,8 @@ def compute_logit_reward(
     perturbed_audio: pt.Tensor,
     logits: pt.Tensor,
     adversarial_bonus: float = 1.0,
-    distortion_penalty: float = 0.8,
-    hf_incentive: float = 1.0,
+    distortion_penalty: float = 0.7,
+    normal_incentive: float = 1.0,
 ):
     """
     Computes a multi-factor reward for the perturbed audio.
@@ -154,43 +154,36 @@ def compute_logit_reward(
 
     # COMPONENT 1: Logit entropy
     entropy = logit_entropy(logits)
+    adversarial_reward = entropy * adversarial_bonus
 
     # COMPONENT 2: Distortion penalty
     # Calculate the mean squared error between the clean and perturbed audio
     delta = pt.mean(pt.square(perturbed_audio - clean_audio))
-
-    # COMPONENT 3: High frequency incentive
-    # Calculate the STFT of the perturbed audio
-    # We use the STFT to get the magnitude of the audio signal
-    spec = pt.stft(
-        perturbed_audio.squeeze(1), n_fft=256, hop_length=128, return_complex=True
-    )
-    mag = spec.abs()
-
-    # High frequency cutoff
-    # Tune for intelligibility
-    freq_high = 0.95
-    cutoff_idx = int(freq_high * mag.size(1))
-
-    # We incentivize high frequency energy and penalize low frequency energy
-    low_eng = mag[:, : (mag.size(1) // 2)].mean()
-    high_eng = mag[:, cutoff_idx:].mean()
-    hf_ratio = (high_eng + 1e-8) / (low_eng + 1e-8)
-
-    # Calculate discounted delta and hf bonus
     discounted_delta = delta * distortion_penalty
-    hf_bonus = hf_ratio * hf_incentive
+
+    # COMPONENT 3: KL Divergence
+    pert_spectrogram = pt.stft(perturbed_audio.squeeze(1), n_fft=512, hop_length=256)
+    clean_spectrogram = pt.stft(clean_audio.squeeze(1), n_fft=512, hop_length=256)
+
+    pert_magnitude = pt.abs(pert_spectrogram).mean(dim=-1)
+    clean_magnitude = pt.abs(clean_spectrogram).mean(dim=-1)
+
+    pert_prob = pert_magnitude / (pert_magnitude.sum(dim=-1, keepdim=True) + 1e-8)
+    clean_prob = clean_magnitude / (clean_magnitude.sum(dim=-1, keepdim=True) + 1e-8)
+
+    kl_divergence = pt.kl_div(pert_prob.log(), clean_prob, reduction="batchmean")
+    kl_reward = kl_divergence * normal_incentive
 
     # Calculate final reward
-    reward = adversarial_bonus * entropy - discounted_delta + hf_bonus
+    reward = adversarial_reward * entropy - discounted_delta + kl_reward
 
     # Return both the reward and a dictionary of metrics
     metrics = {
         "entropy": entropy.item(),
         "delta": delta.item(),
         "discounted_delta": discounted_delta.item(),
-        "hf_ratio": hf_ratio.item(),
-        "hf_bonus": hf_bonus.item(),
+        "kl divergence": kl_divergence.item(),
+        "kl divergence reward": kl_reward.item(),
     }
 
     return reward, metrics
