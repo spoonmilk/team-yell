@@ -8,7 +8,7 @@
 - `./src/attacks/` for attack optimization functions
 - `./src/utilities/` for useful functions used in multiple project areas
 - `./src/sketchpad/` for experimentation/fiddling about with whisper
-- `./testing/` for model testing functions
+- `./src/testing/` for model testing functions
 
 ## Dependencies & Development
 
