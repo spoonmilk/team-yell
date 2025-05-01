@@ -63,6 +63,7 @@ venv.bak/
 #Ignore Data Folders
 LibriSpeech/
 data/
+temp/
 
 #Annoying DS store files
 .DS_store
