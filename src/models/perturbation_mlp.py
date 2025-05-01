@@ -1,6 +1,9 @@
 import torch
 from torch import nn
 
+#NOTE: This code mostly went unused in our project (it was experimented with briefly). 
+# See perturbation_model.py for more project relevant code
+
 class PeturbationMLP(nn.Module):
     """
     An MLP that takes a waveform (B, 1, T)
