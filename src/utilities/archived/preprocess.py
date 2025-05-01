@@ -18,9 +18,9 @@ to time series data.
 """
 
 try: #Path to LibriSpeech dev-clean folder
-    AUDIO_DIR = str(Path(__file__).resolve().parent.parent) + "/LibriSpeech/dev-clean/" #Will work in normal use cases (running this file directly, importing)
+    AUDIO_DIR = str(Path(__file__).resolve().parent.parent.parent) + "/LibriSpeech/dev-clean/" #Will work in normal use cases (running this file directly, importing)
 except NameError:
-    AUDIO_DIR = os.path.abspath("../LibriSpeech/dev-clean") + "/" #Works for when this file gets run interactively (import by interactive python interpreter)
+    AUDIO_DIR = os.path.abspath("../../LibriSpeech/dev-clean") + "/" #Works for when this file gets run interactively (import by interactive python interpreter)
 NUM_WORKERS = 5 #Number of threads you're willing to spawn to parallelize audio file reading
 
 # DATATYPES

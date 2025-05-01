@@ -11,10 +11,10 @@ from .data_access import save_data
 
 # Path to LibriSpeech dev-clean folder (adjust as needed)
 try:
-    BASE_DIR = Path(__file__).resolve().parent.parent
+    BASE_DIR = Path(__file__).resolve().parent.parent.parent
     AUDIO_DIR = str(BASE_DIR / "LibriSpeech" / "dev-clean") + "/"
 except NameError:
-    AUDIO_DIR = os.path.abspath("../LibriSpeech/dev-clean/") + "/"
+    AUDIO_DIR = os.path.abspath("../../LibriSpeech/dev-clean/") + "/"
 
 # Number of threads for parallel I/O
 NUM_WORKERS = 5
