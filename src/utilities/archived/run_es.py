@@ -2,9 +2,9 @@ import torch
 import torchaudio
 import whisper
 
-from ..attacks.es_optim import train_es
-from ..models.perturbation_model import WavPerturbationModel
-from .wer import wer
+from ...attacks.es_optim import train_es
+from ...models.perturbation_model import WavPerturbationModel
+from ..wer import wer
 
 # PATHS/UTILS
 
