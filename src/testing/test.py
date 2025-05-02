@@ -54,7 +54,7 @@ noisy_waves = transform(test_waves, 16000)
 
 def grab_perturbation_model(rel_path: str) -> pt.nn.Module:
     """Given the name of a model file in the checkpoints directory, loads that model in and returns it"""
-    perturbation_model = pt.load(CHECKPOINTS_DIR + rel_path)
+    perturbation_model = pt.load(CHECKPOINTS_DIR + rel_path, weights_only=False)
     return perturbation_model
 
 
@@ -123,7 +123,7 @@ def curried_test_one_aai(
     return test_one_aai
 
 
-def test_aai(perturbation_model: pt.nn.Module, aai_level: str = "best"):
+def test_aai(perturbation_model: pt.nn.Module, aai_level: str = "best", noisy: bool = False):
     """Tests Assembly AI's performance on clean audio compared to its performance on audio perturbed by the input
     perturbation model, printing out the results found. The specific Assembly AI model is specified by aai_level,
     which may be set to 'nano' or 'best'."""
@@ -145,13 +145,20 @@ def test_aai(perturbation_model: pt.nn.Module, aai_level: str = "best"):
     mean_wer_unperturbed = test_audio_set(test_waves, test_transcripts, test_one_aai)
     print(f"AAI {aai_level} MODEL UNPERTURBED MEAN_WER: {mean_wer_unperturbed}")
     # Test model on each perturbed audio clip
-    with pt.no_grad():
-        perturbed_waves = perturbation_model(test_waves)
-    mean_wer_perturbed = test_audio_set(perturbed_waves, test_transcripts, test_one_aai)
-    print(f"AAI {aai_level} MODEL PERTURBED MEAN_WER: {mean_wer_perturbed}")
-    print(
-        f"AAI {aai_level} MODEL WER DEPROVEMENT WITH PERTURBATION: {mean_wer_perturbed - mean_wer_unperturbed}"
-    )
+    if not noisy:
+        with pt.no_grad():
+            perturbed_waves = perturbation_model(test_waves)
+        mean_wer_perturbed = test_audio_set(perturbed_waves, test_transcripts, test_one_aai)
+        print(f"AAI {aai_level} MODEL PERTURBED MEAN_WER: {mean_wer_perturbed}")
+        print(
+            f"AAI {aai_level} MODEL WER DEPROVEMENT WITH PERTURBATION: {mean_wer_perturbed - mean_wer_unperturbed}"
+        )
+    else:
+        mean_wer_noised = test_audio_set(noisy_waves, test_transcripts, test_one_aai)
+        print(f"AAI {aai_level} MODEL NOISY MEAN_WER: {mean_wer_noised}")
+        print(
+            f"AAI {aai_level} MODEL WER DEPROVEMENT WITH NOISE: {mean_wer_noised - mean_wer_unperturbed}"
+        )
 
 
 # WHISPER TEST FUNCTIONS
@@ -192,7 +199,7 @@ def test_whisper(
     which may be set to 'nano' or 'best'. Alternatively, noisy may be set to true to test Whisper against a
     plain noise filter"""
     print("Loading model at level:", whisper_level)
-    whisper_model = whisper.load_model(whisper_level)
+    whisper_model = whisper.load_model(whisper_level, device="cuda")
     # whisper_model.device = "cpu"
     print("Model loaded, running test_set_whisper with the test data")
     unperturbed_wer = test_set_whisper(whisper_model, test_waves, test_transcripts)
@@ -323,19 +330,26 @@ def test_one_gladia(wave: pt.Tensor, trans: str) -> float:
     return test_wer
 
 
-def test_gladia(perturbation_model: pt.nn.Module):
+def test_gladia(perturbation_model: pt.nn.Module, noisy: bool = False):
     """Tests Gladia's performance on clean audio compared to its performance on audio perturbed by the input
     perturbation model, printing out the results found."""
     assert GLADIA_API_KEY, "No Gladia API key in .env file, so cannot run Gladia tests"
     unperturbed_wer = test_audio_set(test_waves, test_transcripts, test_one_gladia)
     print(f"GLADIA MODEL UNPERTURBED MEAN_WER: {unperturbed_wer}")
-    with pt.no_grad():
-        perturbed_waves = perturbation_model(test_waves)
-    perturbed_wer = test_audio_set(perturbed_waves, test_transcripts, test_one_gladia)
-    print(f"GLADIA MODEL PERTURBED MEAN_WER: {perturbed_wer}")
-    print(
-        f"GLADIA MODEL WER DEPROVEMENT WITH PERTURBATION: {perturbed_wer - unperturbed_wer}"
-    )
+    if not noisy:
+        with pt.no_grad():
+            perturbed_waves = perturbation_model(test_waves)
+        perturbed_wer = test_audio_set(perturbed_waves, test_transcripts, test_one_gladia)
+        print(f"GLADIA MODEL PERTURBED MEAN_WER: {perturbed_wer}")
+        print(
+            f"GLADIA MODEL WER DEPROVEMENT WITH PERTURBATION: {perturbed_wer - unperturbed_wer}"
+        )
+    else:
+        noisy_wer = test_audio_set(noisy_waves, test_transcripts, test_one_gladia)
+        print(f"GLADIA MODEL NOISY MEAN_WER: {noisy_wer}")
+        print(
+            f"GLADIA MODEL WER DEPROVEMENT WITH NOISE: {noisy_wer - unperturbed_wer}"
+        )
 
 
 # SPEECHMATICS TEST FUNCTIONS
@@ -389,7 +403,7 @@ def curried_test_one_speechmatics(settings: ConnectionSettings, conf: dict) -> f
     return test_one_speechmatics
 
 
-def test_speechmatics(perturbation_model: pt.nn.Module):
+def test_speechmatics(perturbation_model: pt.nn.Module, noisy: bool = False):
     """Tests Speechmatics' performance on clean audio compared to its performance on audio perturbed by the input
     perturbation model, printing out the results found."""
     assert SPEECHMATICS_API_KEY, (
@@ -405,15 +419,24 @@ def test_speechmatics(perturbation_model: pt.nn.Module):
         test_waves, test_transcripts, test_one_speechmatics
     )
     print(f"SPEECHMATICS MODEL UNPERTURBED MEAN_WER: {unperturbed_wer}")
-    with pt.no_grad():
-        perturbed_waves = perturbation_model(test_waves)
-    perturbed_wer = test_audio_set(
-        perturbed_waves, test_transcripts, test_one_speechmatics
-    )
-    print(f"SPEECHMATICS MODEL PERTURBED MEAN_WER: {perturbed_wer}")
-    print(
-        f"SPEECHMATICS MODEL WER DEPROVEMENT WITH PERTURBATION: {perturbed_wer - unperturbed_wer}"
-    )
+    if not noisy:
+        with pt.no_grad():
+            perturbed_waves = perturbation_model(test_waves)
+        perturbed_wer = test_audio_set(
+            perturbed_waves, test_transcripts, test_one_speechmatics
+        )
+        print(f"SPEECHMATICS MODEL PERTURBED MEAN_WER: {perturbed_wer}")
+        print(
+            f"SPEECHMATICS MODEL WER DEPROVEMENT WITH PERTURBATION: {perturbed_wer - unperturbed_wer}"
+        )
+    else:
+        noisy_wer = test_audio_set(
+            noisy_waves, test_transcripts, test_one_speechmatics
+        )
+        print(f"SPEECHMATICS MODEL NOISY MEAN_WER: {noisy_wer}")
+        print(
+            f"SPEECHMATICS MODEL WER DEPROVEMENT WITH NOISE: {noisy_wer - unperturbed_wer}"
+        )
 
 
 # MAIN BEHAVIOR
@@ -423,9 +446,9 @@ if __name__ == "__main__":
         "wavperturbation_model.pt"
     )  # Alter model file name as needed
     # Uncomment the tests you want to run:
-    # test_aai(model, aai_level="best") #OPTIONS: "nano", "best"
+    # test_aai(model, aai_level="best")  # OPTIONS: "nano", "best"
     # test_speechmatics(model)
-    # test_gladia(model)
-    test_whisper(
-        model, whisper_level="tiny"
-    )  # OPTIONS: "base", "tiny", "medium", "large", "turbo"
+    test_gladia(model)
+    # test_whisper(
+    #     model, whisper_level="base"
+    # )  # OPTIONS: "base", "tiny", "medium", "large", "turbo"
