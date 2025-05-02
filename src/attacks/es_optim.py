@@ -161,8 +161,13 @@ def compute_logit_reward(
     discounted_delta = delta * distortion_penalty
 
     # COMPONENT 3: KL Divergence
-    pert_spectrogram = pt.stft(perturbed_audio.squeeze(1), n_fft=512, hop_length=256)
-    clean_spectrogram = pt.stft(clean_audio.squeeze(1), n_fft=512, hop_length=256)
+    pert_spectrogram = pt.stft(
+        perturbed_audio.squeeze(1), n_fft=512, hop_length=256, return_complex=True
+    )
+
+    clean_spectrogram = pt.stft(
+        clean_audio.squeeze(1), n_fft=512, hop_length=256, return_complex=True
+    )
 
     pert_magnitude = pt.abs(pert_spectrogram).mean(dim=-1)
     clean_magnitude = pt.abs(clean_spectrogram).mean(dim=-1)
@@ -170,18 +175,21 @@ def compute_logit_reward(
     pert_prob = pert_magnitude / (pert_magnitude.sum(dim=-1, keepdim=True) + 1e-8)
     clean_prob = clean_magnitude / (clean_magnitude.sum(dim=-1, keepdim=True) + 1e-8)
 
-    kl_divergence = pt.kl_div(pert_prob.log(), clean_prob, reduction="batchmean")
+    kl_divergence = pt.kl_div(pert_prob.log(), clean_prob)
     kl_reward = kl_divergence * normal_incentive
 
+    kl_reward = kl_reward.cpu()
+    adversarial_reward = adversarial_reward.cpu()
+    discounted_delta = discounted_delta.cpu()
+
     # Calculate final reward
-    reward = adversarial_reward * entropy - discounted_delta - kl_reward
+    reward = adversarial_reward - discounted_delta - kl_reward
 
     # Return both the reward and a dictionary of metrics
     metrics = {
         "entropy": entropy.item(),
         "delta": delta.item(),
         "discounted_delta": discounted_delta.item(),
-        "kl divergence": kl_divergence.item(),
         "kl divergence reward": kl_reward.item(),
     }
 
