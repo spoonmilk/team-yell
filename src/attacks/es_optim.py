@@ -18,7 +18,7 @@ NOISE_MEAN = 0
 NOISE_STD_DEV_RNG_PORTION = 0.05
 MODEL_TYPE = "tiny"
 NUM_WORKERS = 5
-NUM_EPOCHS = 1
+NUM_EPOCHS = 20
 PERFORMANCE_CUTOFF = 0.1
 SCALE_FACTOR = 0.5
 
@@ -40,6 +40,7 @@ whisper_model = whisper.load_model(MODEL_TYPE)
 
 # LOGIT LOSS FUNCTION + HELPERS
 
+
 def extract_logits(perturbed_audio: pt.Tensor):
     """Takes in a perturbed audio tensor and returns logits from Whisper"""
     tokenizer = whisper.tokenizer.get_tokenizer(
@@ -60,6 +61,7 @@ def extract_logits(perturbed_audio: pt.Tensor):
     with pt.inference_mode():
         return whisper_model(mel_batch, tokens)
 
+
 def logit_entropy(logits: pt.Tensor):
     """Returns the entropy of produced Whisper logits"""
     # Get probabilities from logits
@@ -69,6 +71,7 @@ def logit_entropy(logits: pt.Tensor):
     entropy = (probs * log_probs).sum(dim=-1)
     entropy = -entropy.mean()
     return entropy
+
 
 def compute_logit_reward(
     clean_audio: pt.Tensor,
@@ -121,7 +124,7 @@ def compute_logit_reward(
     kl_divergence = pt.kl_div(pert_prob.log(), clean_prob)
     kl_reward = kl_divergence * normal_incentive
 
-    kl_reward = kl_reward.cpu()
+    kl_reward = kl_reward.cpu().mean()
     adversarial_reward = adversarial_reward.cpu()
     discounted_delta = discounted_delta.cpu()
 
@@ -138,7 +141,9 @@ def compute_logit_reward(
 
     return reward, metrics
 
+
 # WER REWARD FUNCTION + HELPERS
+
 
 def whisper_transcribe(audio_data: pt.Tensor) -> list[str]:
     """Transcribes all audio sequences encapsulated within an input tensor and returns whisper's transcriptions of them"""
@@ -159,6 +164,7 @@ def whisper_transcribe(audio_data: pt.Tensor) -> list[str]:
         transcripts.append(result.text)
     return transcripts
 
+
 def compute_wer_reward(
     clean_transcription: list[str], perturbed_transcription: list[str]
 ) -> list[float]:
@@ -176,7 +182,9 @@ def compute_wer_reward(
         wers.append(w_clipped)
     return sum(wers) / len(wers)
 
+
 # ES HELPER FUNCTIONS
+
 
 def mutation_strength(epoch, total_epochs, sig_o=0.5, sig_t=0.01):
     """
@@ -194,6 +202,7 @@ def mutation_strength(epoch, total_epochs, sig_o=0.5, sig_t=0.01):
     t = epoch / total_epochs
     return sig_o * (1 - t) + sig_t * t
 
+
 def noise_params(model: nn.Module, epoch: int = 0):
     """
     Adds noise to the model parameters based on the current epoch.
@@ -204,6 +213,7 @@ def noise_params(model: nn.Module, epoch: int = 0):
         strength = mutation_strength(epoch, NUM_EPOCHS)
         for param in model.parameters():
             param.data.add_(pt.randn_like(param, device=device) * strength)
+
 
 def create_population(
     model: WavPerturbationModel, pop_sz: int, epoch: int = 0
@@ -216,6 +226,7 @@ def create_population(
         noise_params(copy, epoch=epoch)
         population.append(copy)
     return population
+
 
 def update_model_weights(
     model: WavPerturbationModel,
@@ -264,7 +275,9 @@ def scores_to_weights(
     # Softmax to get weights
     return pt.softmax(filtered / scale_factor, dim=0)
 
+
 # MAIN ES TRAINING FUNCTIONS
+
 
 def epoch(
     model: WavPerturbationModel,
@@ -330,8 +343,6 @@ def epoch(
         print(f"Mean Entropy: {mean_metrics['entropy']:.4f}")
         print(f"Mean Delta: {mean_metrics['delta']:.4f}")
         print(f"Mean Discounted Delta: {mean_metrics['discounted_delta']:.4f}")
-        print(f"Mean HF Ratio: {mean_metrics['hf_ratio']:.4f}")
-        print(f"Mean HF Bonus: {mean_metrics['hf_bonus']:.4f}")
         print("---------------------------\n")
 
         print(
@@ -349,6 +360,7 @@ def epoch(
     update_model_weights(model, population, weights)
 
     return float(scores.mean().cpu())
+
 
 def train_es(
     model: WavPerturbationModel,
@@ -368,6 +380,7 @@ def train_es(
     )
     print("Model saved!")
 
+
 # MAIN BEHAVIOR
 
 if __name__ == "__main__":
@@ -379,4 +392,6 @@ if __name__ == "__main__":
         max_delta=MAX_DELTA,
     )
     # Train away!
-    train_es(attack_model, NUM_EPOCHS, type="logit") #type="transcript" is default, but "logit" is more sophisticated gives better results generally
+    train_es(
+        attack_model, NUM_EPOCHS, type="logit"
+    )  # type="transcript" is default, but "logit" is more sophisticated gives better results generally
