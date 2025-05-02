@@ -3,8 +3,19 @@ import torch.nn as nn
 import whisper
 from torch import optim
 
-from ..models.perturbation_model import WavPerturbationModel
-from ..utilities.data_access import grab_batch
+from ...models.perturbation_model import WavPerturbationModel
+from ...utilities.data_access import grab_batch
+
+"""
+PGA (Projected Gradient Ascent) is a relatively simple white box attack involving feeding perturbed inputs through a
+target model, calculating some loss of the model, and backpropogating through it to alter a perturbation model's weights.
+We originally worked on implementing this approach thinking it would be a good point of comparison for our black box
+attacks, but ran into difficulties with Whisper's tokenizer and pytorch's CE Loss function that were difficult to resolve,
+and we figured it would be a better idea to focus all of our time and effort on getting ES alone to work. It's worth
+noting, though, that we later developed a logit based loss function for our ES model that would work for this PGA model
+as well (it's based around the entropy of the logits instead of the cross entropy of the logits and ground truth
+transcription tokens), so with a little more work, we could probably get a version of this working as well. 
+"""
 
 MODEL_TYPE = "tiny"
 
@@ -14,12 +25,11 @@ ce_loss = (
 
 w_model = whisper.load_model(MODEL_TYPE)
 w_model.to(pt.device('cpu'))
-# CREDIT (following two lines and help in tokenizer usage in loss function): ChatGPT (see appendix)
+# CREDIT (following two lines and help in tokenizer usage in loss function): ChatGPT (would include transcripts and more detailed reports if this was actually code we used for any of the deliverables, but this code is essentially unused for this project)
 tokenizer = whisper.tokenizer.get_tokenizer(
     multilingual=True, task="transcribe", language="en"
 )
 tokens = pt.tensor([[tokenizer.sot]], device=w_model.device)
-
 
 def loss(perturbed_audio: pt.Tensor, transcripts: list[str]) -> float:
     # Reset whisper model gradients (just in case)
@@ -51,7 +61,6 @@ def loss(perturbed_audio: pt.Tensor, transcripts: list[str]) -> float:
     print(token_transcripts.shape, whisper_logits.shape)
     return ce_loss(whisper_logits, token_transcripts)
 
-
 def pga_epoch(model: WavPerturbationModel, batch_sz: int = 30, batch_num: int = 10):
     optimizer = optim.Adam(
         model.parameters(), lr=0.001, maximize=True
@@ -63,7 +72,6 @@ def pga_epoch(model: WavPerturbationModel, batch_sz: int = 30, batch_num: int = 
         batch_loss = loss(perturbed_audio, transcripts)
         batch_loss.backwards()
         optimizer.step()
-
 
 # CREDIT: https://medium.com/@zachariaharungeorge/a-deep-dive-into-the-fast-gradient-sign-method-611826e34865 for fgsm concept
 def fgsm(audio_clip: pt.Tensor, trans: str, epsilon):
@@ -77,7 +85,6 @@ def fgsm(audio_clip: pt.Tensor, trans: str, epsilon):
     perturbed_audio = audio_clip + perturbation
     # Return
     return perturbed_audio.detach()
-
 
 if __name__ == "__main__":
     # fgsm example to test loss function

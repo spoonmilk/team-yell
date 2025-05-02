@@ -8,7 +8,7 @@
 - `./src/attacks/` for attack optimization functions
 - `./src/utilities/` for useful functions used in multiple project areas
 - `./src/sketchpad/` for experimentation/fiddling about with whisper
-- `./tests/` for model testing functions
+- `./src/testing/` for model testing functions
 
 ## Dependencies & Development
 
@@ -40,7 +40,7 @@ deactivate
 ### Download LibriSpeech Dataset
 
 ```bash
-# cd team-yell/src
+# cd team-yell
 wget https://us.openslr.org/resources/12/dev-clean.tar.gz
 tar -xzf dev-clean.tar.gz
 rm dev-clean.tar.gz
@@ -48,8 +48,29 @@ rm dev-clean.tar.gz
 
 ### Preprocess and Save Waveforms and Transcripts
 ```bash
-# cd team-yell
 python3 -m src.utilities.preprocess_wav
 ```
 Check to make sure that a "data" directory was made in src with two files in it.
 
+## Testing
+
+### API Key Set Up
+
+Create API keys with Assembly AI, Gladia, and Speechmatics and put them into a `.env` file in the testing directory.
+```bash
+# cd team-yell/src/testing
+touch .env
+```
+Format for `.env` should be:
+```txt
+AAI_API_KEY = "<api_key>"
+GLADIA_API_KEY = "<api_key>"
+SPEECHMATICS_API_KEY = "<api_key>"
+```
+
+### Running Tests
+
+Uncomment the desired tests the bottom of `test.py` and run.
+```bash
+python3 -m src.utilities.test
+```

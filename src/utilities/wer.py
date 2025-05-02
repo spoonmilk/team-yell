@@ -3,7 +3,6 @@ import jiwer
 # WER (Word Error Rate) calculation strategy taken from: https://medium.com/@johnidouglasmarangon/how-to-calculate-the-word-error-rate-in-python-ce0751a46052
 # Thanks to John Douglas Marangon for the article and code snippet.
 
-
 def wer(reference: str, hypothesis: str) -> float:
     """
     Calculate the Word Error Rate (WER) between a reference and a hypothesis.

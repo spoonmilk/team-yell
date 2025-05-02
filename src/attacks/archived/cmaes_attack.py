@@ -2,9 +2,17 @@ from cmaes import CMA
 import numpy as np
 import torch as pt
 import whisper
-from ..models.perturbation_model import WavPerturbationModel
-from ..utilities.data_access import grab_batch
-from ..utilities.wer import wer
+from ...models.perturbation_model import WavPerturbationModel
+from ...utilities.data_access import grab_batch
+from ...utilities.wer import wer
+
+"""
+CMAES is a more involved version of standard ES that is generally considered to yield better results than ES with the
+cost of more compute. We wanted to give CMAES a try mostly because a library (cmaes) already existed that implemented
+much of the standard CMAES functionality and thought it might be interesting to have as a comparison to standard ES. 
+Unfortunately, we couldn't get much a working model after our first handful of attempts and figured it would be a better
+use of time and energy to devote our full attention to standard ES, so this attack was abandoned. 
+"""
 
 POP_SIZE = 50
 BATCH_SIZE = 10
@@ -12,7 +20,6 @@ CMAES_SIGMA = 2
 MODEL_TYPE = "tiny"
 
 whisper_model = whisper.load_model(MODEL_TYPE)
-
 
 def whisper_transcribe(audio_data: pt.Tensor) -> list[str]:
     """Transcribes all audio sequences encapsulated within an input tensor and returns whisper's transcriptions of them"""

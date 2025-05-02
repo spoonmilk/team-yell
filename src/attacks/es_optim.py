@@ -10,22 +10,6 @@ from ..models.perturbation_model import WavPerturbationModel
 from ..utilities.data_access import grab_batch
 from ..utilities.wer import wer
 
-# POTENTIAL REASONS FOR APPARENT NON-LEARNING
-# - Not enough epochs/training time
-# - Model too complex (too many weights could lead to slow convergence for ES if you think about it)
-# - Learning too slow - might need to increase learning rate
-# - Max delta too big - might need to loosen max delta restriction
-# - Every population member takes a step in the wrong direction so model as a whole does - might need to increase population size
-# - Loss function not fine-grained enough for learning to take place
-
-# TASKS
-# - Restrict learning to the top 5 or 10 performers - DONE
-# - Separate training and testing data - DONE
-# - Create testing utility with access to different speech to text models
-# - Finish batcher
-# - Create other perturbation models
-# - Clean functions
-
 # TRAINING HYPERPARAMETERS
 POP_SIZE = 50
 BATCH_SIZE = 10
@@ -48,53 +32,14 @@ try:
     BASE_DIR = Path(__file__).resolve().parent
     CHECKPOINT_PATH = str(BASE_DIR / "checkpoints" / "wavperturbation_model.pt")
 except NameError:
-    AUDIO_DIR = os.path.abspath("./checkpoints/wavperturbation_model.pt")
-# # HOME DIRECTORY FOR YOUR PROJECT - CHANGE THIS FOR YOUR SYSTEM!!!
-# HOME_DIR = "/home/spoonmilk/university/csci1470/team-yell"
-
-# # Saving and loading model
-# CHECKPOINT_PATH = f"{HOME_DIR}/src/attacks/checkpoints/wavperturbation_model.pt"
+    CHECKPOINT_PATH = os.path.abspath("./checkpoints/wavperturbation_model.pt")
 
 # Load Whisper
 device = "cuda" if pt.cuda.is_available() else "cpu"
 whisper_model = whisper.load_model(MODEL_TYPE)
 
+# LOGIT LOSS FUNCTION + HELPERS
 
-# NOT CHECKED
-def whisper_transcribe(audio_data: pt.Tensor) -> list[str]:
-    """Transcribes all audio sequences encapsulated within an input tensor and returns whisper's transcriptions of them"""
-    transcripts = []
-    for audio in audio_data:
-        # Normalize for whisper
-        audio = audio.squeeze().cpu()
-        audio = whisper.pad_or_trim(audio)
-        mel = whisper.log_mel_spectrogram(audio).to(whisper_model.device)
-        if mel.ndim == 3:
-            mel = mel[0]
-        opts = whisper.DecodingOptions()
-        # Decode the audio
-        # Transfers back to gpu for decoding
-        mel = mel.to(device)
-        result = whisper.decode(whisper_model, mel, opts)
-        # decode returns a single DecodingResult
-        transcripts.append(result.text)
-    return transcripts
-
-
-# CHECKED
-def noise_params(model: nn.Module, epoch: int = 0):
-    """
-    Adds noise to the model parameters based on the current epoch.
-    Noise is scaled by the mutation strength, which decreases over time.
-    """
-    device = next(model.parameters()).device
-    with pt.no_grad():
-        strength = mutation_strength(epoch, NUM_EPOCHS)
-        for param in model.parameters():
-            param.data.add_(pt.randn_like(param, device=device) * strength)
-
-
-# LOGIT LOSS FUNCTIONS
 def extract_logits(perturbed_audio: pt.Tensor):
     """Takes in a perturbed audio tensor and returns logits from Whisper"""
     tokenizer = whisper.tokenizer.get_tokenizer(
@@ -115,7 +60,6 @@ def extract_logits(perturbed_audio: pt.Tensor):
     with pt.inference_mode():
         return whisper_model(mel_batch, tokens)
 
-
 def logit_entropy(logits: pt.Tensor):
     """Returns the entropy of produced Whisper logits"""
     # Get probabilities from logits
@@ -125,7 +69,6 @@ def logit_entropy(logits: pt.Tensor):
     entropy = (probs * log_probs).sum(dim=-1)
     entropy = -entropy.mean()
     return entropy
-
 
 def compute_logit_reward(
     clean_audio: pt.Tensor,
@@ -195,8 +138,27 @@ def compute_logit_reward(
 
     return reward, metrics
 
+# WER REWARD FUNCTION + HELPERS
 
-# CHECKED - NOTE: very heavily penalizes missed words (all words afterwards are considered incorrect)
+def whisper_transcribe(audio_data: pt.Tensor) -> list[str]:
+    """Transcribes all audio sequences encapsulated within an input tensor and returns whisper's transcriptions of them"""
+    transcripts = []
+    for audio in audio_data:
+        # Normalize for whisper
+        audio = audio.squeeze().cpu()
+        audio = whisper.pad_or_trim(audio)
+        mel = whisper.log_mel_spectrogram(audio).to(whisper_model.device)
+        if mel.ndim == 3:
+            mel = mel[0]
+        opts = whisper.DecodingOptions()
+        # Decode the audio
+        # Transfers back to gpu for decoding
+        mel = mel.to(device)
+        result = whisper.decode(whisper_model, mel, opts)
+        # decode returns a single DecodingResult
+        transcripts.append(result.text)
+    return transcripts
+
 def compute_wer_reward(
     clean_transcription: list[str], perturbed_transcription: list[str]
 ) -> list[float]:
@@ -214,8 +176,35 @@ def compute_wer_reward(
         wers.append(w_clipped)
     return sum(wers) / len(wers)
 
+# ES HELPER FUNCTIONS
 
-# CHECKED
+def mutation_strength(epoch, total_epochs, sig_o=0.5, sig_t=0.01):
+    """
+    Returns the mutation strength for the current epoch
+
+    See simulated annealing. Basic idea is to start with high mutations
+    to get the search moving, then reduce as the model trains to converge.
+
+    Args:
+        epoch (int): The current epoch
+        total_epochs (int): The total number of epochs
+        sig_o (float): The initial mutation strength
+        sig_t (float): The final mutation strength
+    """
+    t = epoch / total_epochs
+    return sig_o * (1 - t) + sig_t * t
+
+def noise_params(model: nn.Module, epoch: int = 0):
+    """
+    Adds noise to the model parameters based on the current epoch.
+    Noise is scaled by the mutation strength, which decreases over time.
+    """
+    device = next(model.parameters()).device
+    with pt.no_grad():
+        strength = mutation_strength(epoch, NUM_EPOCHS)
+        for param in model.parameters():
+            param.data.add_(pt.randn_like(param, device=device) * strength)
+
 def create_population(
     model: WavPerturbationModel, pop_sz: int, epoch: int = 0
 ) -> list[WavPerturbationModel]:
@@ -228,8 +217,6 @@ def create_population(
         population.append(copy)
     return population
 
-
-# CHECKED
 def update_model_weights(
     model: WavPerturbationModel,
     population: list[WavPerturbationModel],
@@ -277,23 +264,7 @@ def scores_to_weights(
     # Softmax to get weights
     return pt.softmax(filtered / scale_factor, dim=0)
 
-
-def mutation_strength(epoch, total_epochs, sig_o=0.5, sig_t=0.01):
-    """
-    Returns the mutation strength for the current epoch
-
-    See simulated annealing. Basic idea is to start with high mutations
-    to get the search moving, then reduce as the model trains to converge.
-
-    Args:
-        epoch (int): The current epoch
-        total_epochs (int): The total number of epochs
-        sig_o (float): The initial mutation strength
-        sig_t (float): The final mutation strength
-    """
-    t = epoch / total_epochs
-    return sig_o * (1 - t) + sig_t * t
-
+# MAIN ES TRAINING FUNCTIONS
 
 def epoch(
     model: WavPerturbationModel,
@@ -379,7 +350,6 @@ def epoch(
 
     return float(scores.mean().cpu())
 
-
 def train_es(
     model: WavPerturbationModel,
     epochs: int = NUM_EPOCHS,
@@ -398,13 +368,15 @@ def train_es(
     )
     print("Model saved!")
 
+# MAIN BEHAVIOR
 
 if __name__ == "__main__":
-    # build fresh attack model
+    # Build fresh attack model
     attack_model = WavPerturbationModel(
         kernel_size=KERNEL_SIZE,
         num_channels=NUM_CHANNELS,
         num_layers=NUM_LAYERS,
         max_delta=MAX_DELTA,
     )
-    train_es(attack_model, NUM_EPOCHS, type="logit")
+    # Train away!
+    train_es(attack_model, NUM_EPOCHS, type="logit") #type="transcript" is default, but "logit" is more sophisticated gives better results generally

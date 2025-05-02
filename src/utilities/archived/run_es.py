@@ -2,9 +2,13 @@ import torch
 import torchaudio
 import whisper
 
-from ..attacks.es_optim import train_es
-from ..models.perturbation_model import WavPerturbationModel
-from .wer import wer
+from ...attacks.es_optim import train_es
+from ...models.perturbation_model import WavPerturbationModel
+from ..wer import wer
+
+"""
+This was a primitive testing file used before we built out the testing suite in the testing folder
+"""
 
 # PATHS/UTILS
 

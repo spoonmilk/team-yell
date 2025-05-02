@@ -63,10 +63,12 @@ venv.bak/
 #Ignore Data Folders
 LibriSpeech/
 data/
+temp/
 
 #Annoying DS store files
 .DS_store
 train-es.sh
 
 #Api keys
+.env
 api_keys.txt
