@@ -13,14 +13,14 @@ from ..utilities.wer import wer
 # TRAINING HYPERPARAMETERS
 POP_SIZE = 50
 BATCH_SIZE = 10
-LEARNING_RATE = 1
+LEARNING_RATE = 0.2
 NOISE_MEAN = 0
 NOISE_STD_DEV_RNG_PORTION = 0.05
 MODEL_TYPE = "tiny"
 NUM_WORKERS = 5
 NUM_EPOCHS = 20
 PERFORMANCE_CUTOFF = 0.1
-SCALE_FACTOR = 0.5
+SCALE_FACTOR = 0.2
 
 # MODEL PARAMETERS
 NUM_LAYERS = 3
@@ -78,8 +78,8 @@ def compute_logit_reward(
     perturbed_audio: pt.Tensor,
     logits: pt.Tensor,
     adversarial_bonus: float = 1.0,
-    distortion_penalty: float = 0.7,
-    normal_incentive: float = 1.0,
+    distortion_penalty: float = 50,
+    normal_incentive: float = 100.0,
 ):
     """
     Computes a multi-factor reward for the perturbed audio.
@@ -115,28 +115,31 @@ def compute_logit_reward(
         clean_audio.squeeze(1), n_fft=512, hop_length=256, return_complex=True
     )
 
-    pert_magnitude = pt.abs(pert_spectrogram).mean(dim=-1)
-    clean_magnitude = pt.abs(clean_spectrogram).mean(dim=-1)
+    pert_magnitude = pt.abs(pert_spectrogram) + 1e-6
+    clean_magnitude = pt.abs(clean_spectrogram) + 1e-6
 
     pert_prob = pert_magnitude / (pert_magnitude.sum(dim=-1, keepdim=True) + 1e-8)
     clean_prob = clean_magnitude / (clean_magnitude.sum(dim=-1, keepdim=True) + 1e-8)
 
-    kl_divergence = pt.kl_div(pert_prob.log(), clean_prob)
+    kl_bt = (pert_prob * (pert_prob.log() - clean_prob.log())).sum(dim=1)
+
+    # kl_divergence = pt.kl_div(pert_prob.log(), clean_prob)
+    kl_divergence = kl_bt.mean(dim=1)
     kl_reward = kl_divergence * normal_incentive
 
-    kl_reward = kl_reward.cpu().mean()
-    adversarial_reward = adversarial_reward.cpu()
-    discounted_delta = discounted_delta.cpu()
+    kl_reward = kl_reward.mean()
+    adversarial_reward = adversarial_reward
+    discounted_delta = discounted_delta
 
     # Calculate final reward
     reward = adversarial_reward - discounted_delta - kl_reward
 
     # Return both the reward and a dictionary of metrics
     metrics = {
-        "entropy": entropy.item(),
-        "delta": delta.item(),
-        "discounted_delta": discounted_delta.item(),
-        "kl divergence reward": kl_reward.item(),
+        "entropy": entropy,
+        "delta": delta,
+        "distortion_penalty": discounted_delta,
+        "kl_reward": kl_reward,
     }
 
     return reward, metrics
@@ -342,7 +345,8 @@ def epoch(
         print(f"\n--- Epoch {epoch} Mean Metrics ---")
         print(f"Mean Entropy: {mean_metrics['entropy']:.4f}")
         print(f"Mean Delta: {mean_metrics['delta']:.4f}")
-        print(f"Mean Discounted Delta: {mean_metrics['discounted_delta']:.4f}")
+        print(f"Mean Distortion Discount: {mean_metrics['distortion_penalty']:.4f}")
+        print(f"Mean KL Reward: {mean_metrics['kl_reward']:.4f}")
         print("---------------------------\n")
 
         print(
