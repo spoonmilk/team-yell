@@ -13,14 +13,14 @@ from ..utilities.wer import wer
 # TRAINING HYPERPARAMETERS
 POP_SIZE = 50
 BATCH_SIZE = 10
-LEARNING_RATE = 1
+LEARNING_RATE = 0.2
 NOISE_MEAN = 0
 NOISE_STD_DEV_RNG_PORTION = 0.05
 MODEL_TYPE = "tiny"
 NUM_WORKERS = 5
-NUM_EPOCHS = 50
+NUM_EPOCHS = 20
 PERFORMANCE_CUTOFF = 0.1
-SCALE_FACTOR = 0.5
+SCALE_FACTOR = 0.2
 
 # MODEL PARAMETERS
 NUM_LAYERS = 3
@@ -39,6 +39,7 @@ device = "cuda" if pt.cuda.is_available() else "cpu"
 whisper_model = whisper.load_model(MODEL_TYPE)
 
 # LOGIT LOSS FUNCTION + HELPERS
+
 
 def extract_logits(perturbed_audio: pt.Tensor):
     """Takes in a perturbed audio tensor and returns logits from Whisper"""
@@ -60,6 +61,7 @@ def extract_logits(perturbed_audio: pt.Tensor):
     with pt.inference_mode():
         return whisper_model(mel_batch, tokens)
 
+
 def logit_entropy(logits: pt.Tensor):
     """Returns the entropy of produced Whisper logits"""
     # Get probabilities from logits
@@ -70,13 +72,14 @@ def logit_entropy(logits: pt.Tensor):
     entropy = -entropy.mean()
     return entropy
 
+
 def compute_logit_reward(
     clean_audio: pt.Tensor,
     perturbed_audio: pt.Tensor,
     logits: pt.Tensor,
     adversarial_bonus: float = 1.0,
-    distortion_penalty: float = 0.8,
-    hf_incentive: float = 1.0,
+    distortion_penalty: float = 100,
+    normal_incentive: float = 1.0,
 ):
     """
     Computes a multi-factor reward for the perturbed audio.
@@ -97,48 +100,53 @@ def compute_logit_reward(
 
     # COMPONENT 1: Logit entropy
     entropy = logit_entropy(logits)
+    adversarial_reward = entropy * adversarial_bonus
 
     # COMPONENT 2: Distortion penalty
-    # Calculate the mean squared error between the clean and perturbed audio
     delta = pt.mean(pt.square(perturbed_audio - clean_audio))
-
-    # COMPONENT 3: High frequency incentive
-    # Calculate the STFT of the perturbed audio
-    # We use the STFT to get the magnitude of the audio signal
-    spec = pt.stft(
-        perturbed_audio.squeeze(1), n_fft=256, hop_length=128, return_complex=True
-    )
-    mag = spec.abs()
-
-    # High frequency cutoff
-    # Tune for intelligibility
-    freq_high = 0.95
-    cutoff_idx = int(freq_high * mag.size(1))
-
-    # We incentivize high frequency energy and penalize low frequency energy
-    low_eng = mag[:, : (mag.size(1) // 2)].mean()
-    high_eng = mag[:, cutoff_idx:].mean()
-    hf_ratio = (high_eng + 1e-8) / (low_eng + 1e-8)
-
-    # Calculate discounted delta and hf bonus
     discounted_delta = delta * distortion_penalty
-    hf_bonus = hf_ratio * hf_incentive
+
+    # COMPONENT 3: KL Divergence
+    pert_spectrogram = pt.stft(
+        perturbed_audio.squeeze(1), n_fft=512, hop_length=256, return_complex=True
+    )
+
+    clean_spectrogram = pt.stft(
+        clean_audio.squeeze(1), n_fft=512, hop_length=256, return_complex=True
+    )
+
+    pert_magnitude = pt.abs(pert_spectrogram) + 1e-6
+    clean_magnitude = pt.abs(clean_spectrogram) + 1e-6
+
+    pert_prob = pert_magnitude / (pert_magnitude.sum(dim=-1, keepdim=True) + 1e-8)
+    clean_prob = clean_magnitude / (clean_magnitude.sum(dim=-1, keepdim=True) + 1e-8)
+
+    kl_bt = (pert_prob * (pert_prob.log() - clean_prob.log())).sum(dim=1)
+
+    # kl_divergence = pt.kl_div(pert_prob.log(), clean_prob)
+    kl_divergence = kl_bt.mean(dim=1)
+    kl_reward = kl_divergence * normal_incentive
+
+    kl_reward = kl_reward.mean()
+    adversarial_reward = adversarial_reward
+    discounted_delta = discounted_delta
 
     # Calculate final reward
-    reward = adversarial_bonus * entropy - discounted_delta + hf_bonus
+    reward = adversarial_reward - discounted_delta - kl_reward
 
     # Return both the reward and a dictionary of metrics
     metrics = {
-        "entropy": entropy.item(),
-        "delta": delta.item(),
-        "discounted_delta": discounted_delta.item(),
-        "hf_ratio": hf_ratio.item(),
-        "hf_bonus": hf_bonus.item(),
+        "entropy": entropy,
+        "delta": delta,
+        "distortion_penalty": discounted_delta,
+        "kl_reward": kl_reward,
     }
 
     return reward, metrics
 
+
 # WER REWARD FUNCTION + HELPERS
+
 
 def whisper_transcribe(audio_data: pt.Tensor) -> list[str]:
     """Transcribes all audio sequences encapsulated within an input tensor and returns whisper's transcriptions of them"""
@@ -159,6 +167,7 @@ def whisper_transcribe(audio_data: pt.Tensor) -> list[str]:
         transcripts.append(result.text)
     return transcripts
 
+
 def compute_wer_reward(
     clean_transcription: list[str], perturbed_transcription: list[str]
 ) -> list[float]:
@@ -176,7 +185,9 @@ def compute_wer_reward(
         wers.append(w_clipped)
     return sum(wers) / len(wers)
 
+
 # ES HELPER FUNCTIONS
+
 
 def mutation_strength(epoch, total_epochs, sig_o=0.5, sig_t=0.01):
     """
@@ -194,6 +205,7 @@ def mutation_strength(epoch, total_epochs, sig_o=0.5, sig_t=0.01):
     t = epoch / total_epochs
     return sig_o * (1 - t) + sig_t * t
 
+
 def noise_params(model: nn.Module, epoch: int = 0):
     """
     Adds noise to the model parameters based on the current epoch.
@@ -204,6 +216,7 @@ def noise_params(model: nn.Module, epoch: int = 0):
         strength = mutation_strength(epoch, NUM_EPOCHS)
         for param in model.parameters():
             param.data.add_(pt.randn_like(param, device=device) * strength)
+
 
 def create_population(
     model: WavPerturbationModel, pop_sz: int, epoch: int = 0
@@ -216,6 +229,7 @@ def create_population(
         noise_params(copy, epoch=epoch)
         population.append(copy)
     return population
+
 
 def update_model_weights(
     model: WavPerturbationModel,
@@ -264,7 +278,9 @@ def scores_to_weights(
     # Softmax to get weights
     return pt.softmax(filtered / scale_factor, dim=0)
 
+
 # MAIN ES TRAINING FUNCTIONS
+
 
 def epoch(
     model: WavPerturbationModel,
@@ -329,9 +345,8 @@ def epoch(
         print(f"\n--- Epoch {epoch} Mean Metrics ---")
         print(f"Mean Entropy: {mean_metrics['entropy']:.4f}")
         print(f"Mean Delta: {mean_metrics['delta']:.4f}")
-        print(f"Mean Discounted Delta: {mean_metrics['discounted_delta']:.4f}")
-        print(f"Mean HF Ratio: {mean_metrics['hf_ratio']:.4f}")
-        print(f"Mean HF Bonus: {mean_metrics['hf_bonus']:.4f}")
+        print(f"Mean Distortion Discount: {mean_metrics['distortion_penalty']:.4f}")
+        print(f"Mean KL Reward: {mean_metrics['kl_reward']:.4f}")
         print("---------------------------\n")
 
         print(
@@ -349,6 +364,7 @@ def epoch(
     update_model_weights(model, population, weights)
 
     return float(scores.mean().cpu())
+
 
 def train_es(
     model: WavPerturbationModel,
@@ -368,6 +384,7 @@ def train_es(
     )
     print("Model saved!")
 
+
 # MAIN BEHAVIOR
 
 if __name__ == "__main__":
@@ -379,4 +396,6 @@ if __name__ == "__main__":
         max_delta=MAX_DELTA,
     )
     # Train away!
-    train_es(attack_model, NUM_EPOCHS, type="logit") #type="transcript" is default, but "logit" is more sophisticated gives better results generally
+    train_es(
+        attack_model, NUM_EPOCHS, type="logit"
+    )  # type="transcript" is default, but "logit" is more sophisticated gives better results generally
