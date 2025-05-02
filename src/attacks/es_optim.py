@@ -78,8 +78,8 @@ def compute_logit_reward(
     perturbed_audio: pt.Tensor,
     logits: pt.Tensor,
     adversarial_bonus: float = 1.0,
-    distortion_penalty: float = 50,
-    normal_incentive: float = 100.0,
+    distortion_penalty: float = 100,
+    normal_incentive: float = 1.0,
 ):
     """
     Computes a multi-factor reward for the perturbed audio.
