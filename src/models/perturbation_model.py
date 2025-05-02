@@ -1,5 +1,7 @@
 import torch as pt
 from torch import nn
+
+
 class WavPerturbationModel(nn.Module):
     """
     1D CNN that takes a waveform (B, 1, T)
@@ -31,14 +33,17 @@ class WavPerturbationModel(nn.Module):
         layers.append(entry_layer)
         layers.append(nn.ReLU(inplace=True))
 
-        for _ in range(num_layers):
+        for i in range(num_layers):
+            d = 2**i
             conv_layer = nn.Conv1d(
                 in_channels=num_channels,
                 out_channels=num_channels,
                 kernel_size=kernel_size,
-                padding=kernel_size // 2,
+                padding="same",
+                dilation=d,
             )
             layers.append(conv_layer)
+            layers.append(nn.BatchNorm1d(num_channels))
             layers.append(nn.ReLU(inplace=True))
 
         exit_layer = nn.Conv1d(
@@ -81,8 +86,9 @@ class WavPerturbationModel(nn.Module):
         x = x.tanh() * self.max_delta
         return x.squeeze(1) if in_waveform.ndim == 3 else x
 
-#The following is a largely unused spectrogram perturbation model for when we were considering using spectrograms
-#instead of waveform data. See above for model we more heavily used in this project.
+
+# The following is a largely unused spectrogram perturbation model for when we were considering using spectrograms
+# instead of waveform data. See above for model we more heavily used in this project.
 class SpectroPerturbationModel(nn.Module):
     """
     A 2D CNN that takes a log mel spectrogram (B, 1, F, T)
@@ -161,4 +167,3 @@ class SpectroPerturbationModel(nn.Module):
         # Clamp to +- db_max
         x = x.tanh() * self.db_max
         return x.squeeze(1) if in_spectrogram.ndim == 3 else x
-
