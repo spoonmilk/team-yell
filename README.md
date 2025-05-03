@@ -10,6 +10,8 @@
 - `./src/sketchpad/` for experimentation/fiddling about with whisper
 - `./src/testing/` for model testing functions
 
+**_All papers are in the top-level directory_**
+
 ## Dependencies & Development
 
 ### REQUIRED: Python 3.12 OR LOWER
@@ -47,9 +49,11 @@ rm dev-clean.tar.gz
 ```
 
 ### Preprocess and Save Waveforms and Transcripts
+
 ```bash
 python3 -m src.utilities.preprocess_wav
 ```
+
 Check to make sure that a "data" directory was made in src with two files in it.
 
 ## Testing
@@ -57,20 +61,32 @@ Check to make sure that a "data" directory was made in src with two files in it.
 ### API Key Set Up
 
 Create API keys with Assembly AI, Gladia, and Speechmatics and put them into a `.env` file in the testing directory.
+
 ```bash
 # cd team-yell/src/testing
 touch .env
 ```
+
 Format for `.env` should be:
+
 ```txt
 AAI_API_KEY = "<api_key>"
 GLADIA_API_KEY = "<api_key>"
 SPEECHMATICS_API_KEY = "<api_key>"
 ```
 
+### Training
+
+Adjust hyperparameters in `./src/attacks/es_optim.py` as wanted and run
+
+```bash
+python3 -m src.attacks.es_optim
+```
+
 ### Running Tests
 
 Uncomment the desired tests the bottom of `test.py` and run.
+
 ```bash
-python3 -m src.utilities.test
+python3 -m src.testing.test
 ```
