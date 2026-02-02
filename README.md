@@ -1,5 +1,9 @@
 # Team Yell: Adversarial Learning on Speech-to-text Models
 
+## Read the papers!
+
+See `./team_yell_final_paper.pdf` and `./team_yell_poster.pdf`
+
 ## File Structure
 
 - `./docs/` for internal project documentation
